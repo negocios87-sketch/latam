@@ -642,7 +642,10 @@ function renderClassificacao(){
         <div style="display:flex;gap:8px;align-items:center">
           <span style="font-size:.72rem;color:rgba(255,255,255,.4)">${classCount}/${total} classificados</span>
           <button class="tbtn-snap" onclick="salvarClassificacao()">💾 Salvar e Atualizar</button>
-          <button class="tbtn" onclick="limparClassificacao()">🗑 Limpar Tudo</button>
+          <button class="tbtn" onclick="exportarClassificacao()" title="Baixar backup JSON das classificações">⬇ Exportar</button>
+          <button class="tbtn" onclick="document.getElementById('importClassInput').click()" title="Carregar backup JSON">⬆ Importar</button>
+          <input type="file" id="importClassInput" accept=".json" style="display:none" onchange="importarClassificacao(event)">
+          <button class="tbtn" onclick="limparClassificacao()">🗑 Limpar</button>
         </div>
       </div>
       <div style="overflow-x:auto">
@@ -655,6 +658,7 @@ function renderClassificacao(){
             <th>Valor Pipe</th>
             <th style="text-align:left;min-width:180px">Origem</th>
             <th>Ticket Cheio</th>
+            <th>Link</th>
           </tr></thead>
           <tbody>
             ${deals.map(d=>{
@@ -675,12 +679,42 @@ function renderClassificacao(){
                   </select>
                 </td>
                 <td><input type="number" class="cl-input" data-id="${d.id}" value="${cl.ticketCheio||''}" placeholder="${Math.round(d.valor)}" min="0" step="100"/></td>
+                <td style="text-align:center"><a href="https://boardacademy.pipedrive.com/deal/${d.id}" target="_blank" style="color:var(--latam);font-size:.8rem;text-decoration:none;font-weight:600" title="Abrir no Pipedrive">↗</a></td>
               </tr>`;
             }).join('')}
           </tbody>
         </table>
       </div>
     </div>`;
+}
+
+function exportarClassificacao(){
+  const classMap=getClassMap();
+  if(!Object.keys(classMap).length){alert('Nenhuma classificação salva ainda.');return;}
+  const now=new Date();
+  const payload={exportadoEm:now.toISOString(),mes:DATA?.mes||'',classificacoes:classMap};
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;
+  a.download=`classificacao-latam-${now.toISOString().slice(0,10)}.json`;
+  a.click();URL.revokeObjectURL(url);
+}
+
+function importarClassificacao(e){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    try{
+      const json=JSON.parse(ev.target.result);
+      if(!json.classificacoes){alert('Arquivo inválido — deve ser um export de classificação.');return;}
+      const existing=getClassMap();
+      const merged={...existing,...json.classificacoes};
+      saveClassMap(merged);
+      alert(`✅ ${Object.keys(json.classificacoes).length} classificações importadas e mescladas com as existentes.`);
+      renderClassificacao();render();
+    }catch(err){alert('Erro ao ler arquivo: '+err.message);}
+  };
+  reader.readAsText(file);e.target.value='';
 }
 
 function salvarClassificacao(){
