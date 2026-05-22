@@ -310,5 +310,33 @@ app.get('/api/report', async(req,res)=>{
   }
 });
 
+
+// ── DEBUG: ver valores reais do campo renda ──────────────────
+app.get('/api/debug-renda', async(req,res)=>{
+  if(!API_TOKEN)return res.status(500).json({ok:false,error:'sem token'});
+  try{
+    const [allDeals, regras] = await Promise.all([
+      fetchByFilter(FILTER_LATAM),
+      carregarRegrasScore(),
+    ]);
+    // Conta frequência de cada valor bruto do campo renda
+    const freq={};
+    for(const deal of allDeals.slice(0,500)){
+      const raw=String(deal[FIELD_RENDA]||'(vazio)').trim();
+      freq[raw]=(freq[raw]||0)+1;
+    }
+    // Mostra top 40 valores + se bateu no DEPARA
+    const resultado=Object.entries(freq)
+      .sort((a,b)=>b[1]-a[1])
+      .slice(0,40)
+      .map(([raw,count])=>{
+        const norm=normalizarTexto(raw);
+        const match=regras.find(r=>r.tipo==='renda'&&r.pais==='latam'&&r.contemNorm&&norm.includes(r.contemNorm));
+        return{raw,norm,count,match:match?match.legenda:'❌ SEM MATCH',contemUsado:match?match.contem:null};
+      });
+    res.json({ok:true,totalDeals:allDeals.length,regrasLatam:regras.filter(r=>r.tipo==='renda'&&r.pais==='latam').length,resultado});
+  }catch(e){res.status(500).json({ok:false,error:e.message});}
+});
+
 if(process.env.NODE_ENV!=='production')app.listen(PORT,()=>console.log(`✓ Porta ${PORT}`));
 module.exports=app;
