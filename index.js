@@ -12,21 +12,10 @@ const FILTER_LATAM    = process.env.FILTER_LATAM    || '1654189';
 const PRODUCT_FIELD      = '8bdce76ba66f0fed0280918a4845190c92899ed5';
 const REFERIDO_FIELD     = '54fc9258843cdf7ea126b6c5aca9d4dc93a3a718';
 const FIELD_RENDA        = 'c95b2c453828853409c0a1f5d5f1a6ab30eebebf';
-const FIELD_CARGO        = '718c8aba81211c883ffd9f4616f75ee22a10b2da';
-const FIELD_IDADE        = '83d18fca9a1f15041acebd03956039213f47c75a';
-const FIELD_ESCOLARIDADE = '93ce10ba72f6b8aab8a4d18d699ddeb36b12ab1f';
 const SCORE_RULES_URL    = process.env.SCORE_RULES_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=422517996&single=true&output=csv';
 
-const SCORE_DEFAULTS = {renda:1.1,cargo:0.9,idade:0.5,escolaridade:1.0};
-const SCORE_FAIXAS = [
-  {label:'De 2 a 2,9',min:2,max:3},{label:'De 3 a 3,9',min:3,max:4},
-  {label:'De 4 a 4,9',min:4,max:5},{label:'De 5 a 5,9',min:5,max:6},
-  {label:'De 6 a 6,9',min:6,max:7},{label:'De 7 a 7,9',min:7,max:8},
-  {label:'De 8 a 8,9',min:8,max:9},{label:'De 9 a 10', min:9,max:10.000001},
-];
-
-// ── Classificação por país ────────────────────────────────────
+// ── País ──────────────────────────────────────────────────────
 function getPais(deal){
   return String(deal[PRODUCT_FIELD]||'').toLowerCase().includes('chile')?'CHILE':'MEXICO';
 }
@@ -34,8 +23,10 @@ function isReferido(deal){
   return String(deal[REFERIDO_FIELD]||'').toLowerCase().includes('indicacao-comercial');
 }
 
-// ── Score (idêntico ao projeto original) ─────────────────────
-function normalizarTexto(v){return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();}
+// ── Score por renda (LATAM only) ──────────────────────────────
+function normalizarTexto(v){
+  return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
 function parseCsvLine(line,delim){
   const out=[];let cur='';let inQ=false;
   for(let i=0;i<line.length;i++){
@@ -48,7 +39,11 @@ function parseCsvLine(line,delim){
   out.push(cur);
   return out.map(x=>x.trim());
 }
-function parsePontuacao(v){const n=parseFloat(String(v||'').replace(',','.'));return Number.isFinite(n)?n:null;}
+function parsePontuacao(v){
+  const n=parseFloat(String(v||'').replace(',','.'));
+  return Number.isFinite(n)?n:null;
+}
+
 async function carregarRegrasScore(){
   try{
     const r=await fetch(SCORE_RULES_URL,{cache:'no-store'});
@@ -57,26 +52,48 @@ async function carregarRegrasScore(){
     const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     if(!linhas.length)return[];
     const delim=linhas[0].includes('\t')?'\t':',';
+    // Colunas: tipo, contem, pontuacao, país, legenda
     return linhas.slice(1).map(line=>{
       const cols=parseCsvLine(line,delim);
-      const tipo=normalizarTexto(cols[0]);
-      const contem=String(cols[1]||'').trim();
-      const pontuacao=parsePontuacao(cols[2]);
-      return{tipo,contem,contemNorm:normalizarTexto(contem),pontuacao};
+      return{
+        tipo:      normalizarTexto(cols[0]),
+        contem:    String(cols[1]||'').trim(),
+        contemNorm:normalizarTexto(cols[1]),
+        pontuacao: parsePontuacao(cols[2]),
+        pais:      normalizarTexto(cols[3]),
+        legenda:   String(cols[4]||'').trim(),
+      };
     }).filter(r=>r.tipo&&r.pontuacao!==null);
   }catch(e){console.warn('Score rules failed:',e.message);return[];}
 }
-function scorePorTipo(tipo,texto,regras){
-  const textoNorm=normalizarTexto(texto);
-  if(!textoNorm)return SCORE_DEFAULTS[tipo]||0;
-  const match=regras.find(r=>r.tipo===tipo&&r.contemNorm&&textoNorm.includes(r.contemNorm));
-  return match?match.pontuacao:(SCORE_DEFAULTS[tipo]||0);
+
+// Retorna legenda da faixa de renda do deal (filtra LATAM)
+function getRendaLegenda(deal,regras){
+  const textoNorm=normalizarTexto(deal[FIELD_RENDA]);
+  if(!textoNorm)return'Não informado';
+  const match=regras.find(r=>
+    r.tipo==='renda'&&
+    r.pais==='latam'&&
+    r.contemNorm&&
+    textoNorm.includes(r.contemNorm)
+  );
+  return match?(match.legenda||match.contem):'Não informado';
 }
-function calcularScore(deal,regras){
-  return +(scorePorTipo('renda',deal[FIELD_RENDA],regras)+scorePorTipo('cargo',deal[FIELD_CARGO],regras)+scorePorTipo('idade',deal[FIELD_IDADE],regras)+scorePorTipo('escolaridade',deal[FIELD_ESCOLARIDADE],regras)).toFixed(2);
+
+// Monta lista de faixas únicas ordenadas por pontuacao asc
+function buildFaixas(regras){
+  const seen=new Map();
+  regras
+    .filter(r=>r.tipo==='renda'&&r.pais==='latam'&&r.legenda)
+    .forEach(r=>{if(!seen.has(r.legenda))seen.set(r.legenda,r.pontuacao);});
+  const faixas=[...seen.entries()]
+    .sort((a,b)=>a[1]-b[1])
+    .map(([legenda,pontuacao])=>({legenda,pontuacao}));
+  // Garante "Não informado" no fim
+  faixas.push({legenda:'Não informado',pontuacao:-1});
+  return faixas;
 }
-function faixaScore(score){const f=SCORE_FAIXAS.find(x=>score>=x.min&&score<x.max);return f?f.label:null;}
-function emptyFaixas(){return Object.fromEntries(SCORE_FAIXAS.map(f=>[f.label,0]));}
+function emptyFaixas(faixas){return Object.fromEntries(faixas.map(f=>[f.legenda,0]));}
 
 // ── Date utils ────────────────────────────────────────────────
 const toYM  = d=>d?String(d).substring(0,7):null;
@@ -97,7 +114,11 @@ function getWeeks(n=8){
   const base=new Date(currThu);
   base.setUTCDate(currThu.getUTCDate()-7);
   const weeks=[];
-  for(let i=n-1;i>=0;i--){const d=new Date(base);d.setUTCDate(base.getUTCDate()-i*7);weeks.push(d.toISOString().substring(0,10));}
+  for(let i=n-1;i>=0;i--){
+    const d=new Date(base);
+    d.setUTCDate(base.getUTCDate()-i*7);
+    weeks.push(d.toISOString().substring(0,10));
+  }
   return weeks;
 }
 function addMonths(ym,n){
@@ -144,18 +165,19 @@ app.get('/api/report', async(req,res)=>{
     const daysInMonth=new Date(year,month,0).getDate();
     const allDays=Array.from({length:daysInMonth},(_,i)=>`${curYM}-${String(i+1).padStart(2,'0')}`);
 
-    // Acumuladores
+    const faixas=buildFaixas(regrasScore);
+
     const C={
       total:0,porDia:{},porSemana:{},
-      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(),porDia:{},porSemana:{}},
-      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(),porDia:{},porSemana:{}},
+      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
+      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
       referidos:{total:0,a:0,g:0,p:0},
     };
     const G={deals:[],porDia:{},porSemana:{},origemTemporal:{}};
     const P={
       total:0,porDia:{},porSemana:{},origemTemporal:{},
-      chile:{total:0,motivos:{},scoreFaixas:emptyFaixas()},
-      mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas()},
+      chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
+      mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
     };
 
     for(const deal of allDeals){
@@ -165,7 +187,7 @@ app.get('/api/report', async(req,res)=>{
       const addW=weekStart(deal.add_time);
       const pc=pais==='CHILE'?C.chile:C.mexico;
 
-      // ── CRIADOS (eixo: add_time) ───────────────────────────
+      // ── CRIADOS ───────────────────────────────────────────
       if(addYM===curYM){
         const addD=toYMD(deal.add_time);
         C.total++;pc.total++;
@@ -174,9 +196,9 @@ app.get('/api/report', async(req,res)=>{
         if(deal.status==='open')pc.st.a++;
         else if(deal.status==='won')pc.st.g++;
         else if(deal.status==='lost')pc.st.p++;
-        const score=calcularScore(deal,regrasScore);
-        const faixa=faixaScore(score);
-        if(faixa)pc.scoreFaixas[faixa]++;
+        const legenda=getRendaLegenda(deal,regrasScore);
+        if(pc.scoreFaixas[legenda]!==undefined)pc.scoreFaixas[legenda]++;
+        else pc.scoreFaixas['Não informado']=(pc.scoreFaixas['Não informado']||0)+1;
         if(ref){
           C.referidos.total++;
           if(deal.status==='open')C.referidos.a++;
@@ -189,7 +211,7 @@ app.get('/api/report', async(req,res)=>{
         pc.porSemana[addW]=(pc.porSemana[addW]||0)+1;
       }
 
-      // ── GANHOS (eixo: won_time) ────────────────────────────
+      // ── GANHOS ────────────────────────────────────────────
       if(deal.status==='won'&&deal.won_time){
         const wonYM=toYM(deal.won_time);
         const wonW=weekStart(deal.won_time);
@@ -201,11 +223,8 @@ app.get('/api/report', async(req,res)=>{
           else if(addYM===prevYM)tempCat='prev';
           else if(addYM===prev2YM)tempCat='prev2';
           G.deals.push({
-            id:deal.id,
-            titulo:deal.title||'—',
-            pais,
-            dataGanho:wonD,
-            valor:val,
+            id:deal.id,titulo:deal.title||'—',pais,
+            dataGanho:wonD,valor:val,
             proprietario:deal.owner_name||(deal.user_id&&deal.user_id.name)||'—',
             addTime:toYMD(deal.add_time),
           });
@@ -219,7 +238,7 @@ app.get('/api/report', async(req,res)=>{
         }
       }
 
-      // ── PERDIDOS (eixo: lost_time) ─────────────────────────
+      // ── PERDIDOS ──────────────────────────────────────────
       if(deal.status==='lost'&&deal.lost_time){
         const lostYM=toYM(deal.lost_time);
         const lostW=weekStart(deal.lost_time);
@@ -230,9 +249,9 @@ app.get('/api/report', async(req,res)=>{
           P.total++;pp.total++;
           P.porDia[lostD]=(P.porDia[lostD]||0)+1;
           pp.motivos[motivo]=(pp.motivos[motivo]||0)+1;
-          const score=calcularScore(deal,regrasScore);
-          const faixa=faixaScore(score);
-          if(faixa)pp.scoreFaixas[faixa]++;
+          const legenda=getRendaLegenda(deal,regrasScore);
+          if(pp.scoreFaixas[legenda]!==undefined)pp.scoreFaixas[legenda]++;
+          else pp.scoreFaixas['Não informado']=(pp.scoreFaixas['Não informado']||0)+1;
           let tempCat='antes';
           if(addYM===curYM)tempCat='cur';
           else if(addYM===prevYM)tempCat='prev';
@@ -246,7 +265,10 @@ app.get('/api/report', async(req,res)=>{
     // ── Serialização ──────────────────────────────────────────
     const MES_NOMES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     const ymLabel=ym=>{const[y,m]=ym.split('-');return MES_NOMES[+m-1]+'/'+y.slice(2);};
-    const serFaixas=(sf,total)=>SCORE_FAIXAS.map(f=>{const v=sf[f.label]||0;return{label:f.label,v,pct:total>0?+((v/total)*100).toFixed(1):0};});
+    const serFaixas=(sf,total)=>faixas.map(f=>{
+      const v=sf[f.legenda]||0;
+      return{label:f.legenda,v,pct:total>0?+((v/total)*100).toFixed(1):0};
+    });
     const origTemporalSer=(ot,total)=>[
       {label:`Mês atual (${ymLabel(curYM)})`,v:ot.cur||0,  pct:total>0?Math.round((ot.cur||0)/total*100):0},
       {label:ymLabel(prevYM),                v:ot.prev||0, pct:total>0?Math.round((ot.prev||0)/total*100):0},
@@ -256,6 +278,7 @@ app.get('/api/report', async(req,res)=>{
 
     res.json({
       ok:true,mes:curYM,updatedAt:new Date().toISOString(),
+      faixasLabels:faixas.map(f=>f.legenda),
       criados:{
         total:C.total,
         mediaDia:allDays.length?+(C.total/allDays.length).toFixed(1):0,
