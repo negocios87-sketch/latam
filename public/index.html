@@ -299,30 +299,16 @@ function mkStackedBar(id,labels,datasets,opts={}){
 function mkScoreLine(id,items,col,snapItems){
   dk(id);const ctx=document.getElementById(id);if(!ctx)return;
   const labels=(items||[]).map(x=>x.label),values=(items||[]).map(x=>x.pct||0),volumes=(items||[]).map(x=>x.v||0);
-  const bandPlugin={id:'scoreBand',beforeDraw(chart){
-    const{ctx:c,chartArea,scales}=chart;if(!chartArea||!scales?.x)return;
-    try{
-      const step=scales.x.getPixelForValue(1)-scales.x.getPixelForValue(0);
-      const x0=scales.x.getPixelForValue(4)-step/2,x1=scales.x.getPixelForValue(6)+step/2;
-      c.save();c.fillStyle='rgba(184,135,63,.18)';c.fillRect(x0,chartArea.top,x1-x0,chartArea.bottom-chartArea.top);
-      c.strokeStyle='rgba(184,135,63,.45)';c.lineWidth=1;c.setLineDash([4,3]);
-      c.beginPath();c.moveTo(x0,chartArea.top);c.lineTo(x0,chartArea.bottom);c.stroke();
-      c.beginPath();c.moveTo(x1,chartArea.top);c.lineTo(x1,chartArea.bottom);c.stroke();
-      c.setLineDash([]);c.fillStyle='rgba(184,135,63,.7)';c.font='bold 9px DM Sans,sans-serif';
-      c.textAlign='center';c.fillText('ICP',(x0+x1)/2,chartArea.top+12);c.restore();
-    }catch(e){}
-  }};
-  charts[id]=new Chart(ctx,{type:'line',
+  charts[id]=new Chart(ctx,{type:'bar',
     data:{labels,datasets:[
-      ...(snapItems&&snapItems.length?[{data:snapItems.map(x=>x.pct||0),borderColor:'#bbb',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],fill:false,tension:.28,pointRadius:2,pointBackgroundColor:'#bbb',datalabels:{display:false}}]:[]),
-      {data:values,borderColor:col,backgroundColor:col+'18',borderWidth:2,fill:false,tension:.28,pointRadius:4,pointHoverRadius:5,pointBackgroundColor:col}
+      ...(snapItems&&snapItems.length?[{type:'line',data:snapItems.map(x=>x.pct||0),borderColor:'#bbb',backgroundColor:'transparent',borderWidth:1.5,borderDash:[4,3],fill:false,tension:.28,pointRadius:2,pointBackgroundColor:'#bbb',datalabels:{display:false},order:0}]:[]),
+      {type:'bar',data:values,backgroundColor:col+'33',borderColor:col,borderWidth:1.5,borderRadius:4,order:1}
     ]},
-    plugins:[bandPlugin],
     options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24,right:8,left:4}},
       plugins:{legend:{display:false},
-        datalabels:{display:c=>c.dataset.data[c.dataIndex]>0,formatter:v=>Number(v).toFixed(v%1?1:0)+'%',color:'#1c2b3a',backgroundColor:'rgba(255,255,255,.78)',borderRadius:3,padding:{top:2,bottom:2,left:4,right:4},font:{family:'DM Sans',size:9,weight:'700'},anchor:'end',align:'top',offset:3},
+        datalabels:{display:c=>c.datasetIndex===(snapItems&&snapItems.length?1:0)&&c.dataset.data[c.dataIndex]>0,formatter:v=>Number(v).toFixed(v%1?1:0)+'%',color:col,font:{family:'DM Sans',size:9,weight:'700'},anchor:'end',align:'top',offset:2},
         tooltip:{callbacks:{label:c=>` ${Number(c.parsed.y).toFixed(1)}% · ${fmtN(volumes[c.dataIndex]||0)} leads`}}},
-      scales:{x:{grid:{display:false},ticks:{font:{size:9}},border:{color:'transparent'}},
+      scales:{x:{grid:{display:false},ticks:{font:{size:9},maxRotation:35,minRotation:20},border:{color:'transparent'}},
         y:{grid:{color:GC},ticks:{font:{size:9},callback:v=>v+'%',maxTicksLimit:5},border:{color:'transparent'},beginAtZero:true,suggestedMax:40}}}});
 }
 
@@ -495,7 +481,7 @@ function render(){
       <div>
         <div class="ph-badge">LATAM · Inteligência Comercial</div>
         <div class="ph-ttl">LATAM · ${mes}</div>
-        <div class="ph-sub">Chile + México · um filtro, uma visão</div>
+        <div class="ph-sub">🇨🇱 Chile + 🇲🇽 México · um filtro, uma visão</div>
       </div>
     </div>
 
@@ -524,12 +510,12 @@ function render(){
     </div>
     ${statusTable}
     <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl">Volume dia a dia · Chile vs México</div><div class="cwrap md"><canvas id="ch-cri-dia"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Volume dia a dia · 🇨🇱 Chile vs 🇲🇽 México</div><div class="cwrap md"><canvas id="ch-cri-dia"></canvas></div></div>
       <div class="ccard"><div class="ccard-ttl">Volume por semana · últimas 8 semanas (Qui→Qua)</div><div class="cwrap md"><canvas id="ch-cri-sem"></canvas></div></div>
     </div>
     <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl">Score por faixa · 🇨🇱 Chile · zona dourada = ICP</div><div class="cwrap md"><canvas id="ch-score-chile"></canvas></div></div>
-      <div class="ccard"><div class="ccard-ttl">Score por faixa · 🇲🇽 México · zona dourada = ICP</div><div class="cwrap md"><canvas id="ch-score-mexico"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Faixa de Renda · 🇨🇱 Chile</div><div class="cwrap md"><canvas id="ch-score-chile"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Faixa de Renda · 🇲🇽 México</div><div class="cwrap md"><canvas id="ch-score-mexico"></canvas></div></div>
     </div>
 
     <!-- GANHOS -->
@@ -601,8 +587,8 @@ function render(){
         <div class="motivos" style="margin-top:4px">${motivosHtml(perdidos.mexico.motivos,'var(--mexico)')}</div></div>
     </div>
     <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl">Score perdidos · 🇨🇱 Chile · zona dourada = ICP</div><div class="cwrap md"><canvas id="ch-perd-score-chile"></canvas></div></div>
-      <div class="ccard"><div class="ccard-ttl">Score perdidos · 🇲🇽 México · zona dourada = ICP</div><div class="cwrap md"><canvas id="ch-perd-score-mexico"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Faixa de Renda (perdidos) · 🇨🇱 Chile</div><div class="cwrap md"><canvas id="ch-perd-score-chile"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Faixa de Renda (perdidos) · 🇲🇽 México</div><div class="cwrap md"><canvas id="ch-perd-score-mexico"></canvas></div></div>
     </div>
     <div class="ot-card" style="margin-bottom:16px">
       <div class="ot-title">Quando foi criado o lead que foi perdido</div>
@@ -884,11 +870,11 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
   <div class="two-col">
     <div>
       <div class="blk-title">Volume por dia</div>
-      ${tbl(['Dia','Chile','México','Total'],crDiaRows||'<tr><td colspan="4" class="empty">Sem dados</td></tr>',null)}
+      ${tbl(['Dia','🇨🇱 Chile','🇲🇽 México','Total'],crDiaRows||'<tr><td colspan="4" class="empty">Sem dados</td></tr>',null)}
     </div>
     <div>
       <div class="blk-title">Volume por semana</div>
-      ${tbl(['Semana','Chile','México','Total'],crSemRows||'<tr><td colspan="4" class="empty">Sem dados</td></tr>',null)}
+      ${tbl(['Semana','🇨🇱 Chile','🇲🇽 México','Total'],crSemRows||'<tr><td colspan="4" class="empty">Sem dados</td></tr>',null)}
     </div>
   </div>
   <div class="two-col">
