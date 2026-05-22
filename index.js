@@ -25,7 +25,7 @@ function isReferido(deal){
 
 // ── Score por renda (LATAM only) ──────────────────────────────
 function normalizarTexto(v){
-  return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  return String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/_/g,' ').replace(/\s+/g,' ').trim();
 }
 function parseCsvLine(line,delim){
   const out=[];let cur='';let inQ=false;
