@@ -311,7 +311,7 @@ app.get('/api/report', async(req,res)=>{
 });
 
 
-// ── DEBUG: ver valores reais do campo renda ──────────────────
+// ── DEBUG: ver valores reais do campo renda (mês atual) ──────
 app.get('/api/debug-renda', async(req,res)=>{
   if(!API_TOKEN)return res.status(500).json({ok:false,error:'sem token'});
   try{
@@ -319,22 +319,25 @@ app.get('/api/debug-renda', async(req,res)=>{
       fetchByFilter(FILTER_LATAM),
       carregarRegrasScore(),
     ]);
+    const curYM=new Date().toISOString().substring(0,7);
+    const dealsDoMes=allDeals.filter(d=>toYM(d.add_time)===curYM);
     // Conta frequência de cada valor bruto do campo renda
     const freq={};
-    for(const deal of allDeals.slice(0,500)){
+    for(const deal of dealsDoMes){
       const raw=String(deal[FIELD_RENDA]||'(vazio)').trim();
       freq[raw]=(freq[raw]||0)+1;
     }
-    // Mostra top 40 valores + se bateu no DEPARA
     const resultado=Object.entries(freq)
       .sort((a,b)=>b[1]-a[1])
-      .slice(0,40)
+      .slice(0,50)
       .map(([raw,count])=>{
         const norm=normalizarTexto(raw);
         const match=regras.find(r=>r.tipo==='renda'&&r.pais==='latam'&&r.contemNorm&&norm.includes(r.contemNorm));
         return{raw,norm,count,match:match?match.legenda:'❌ SEM MATCH',contemUsado:match?match.contem:null};
       });
-    res.json({ok:true,totalDeals:allDeals.length,regrasLatam:regras.filter(r=>r.tipo==='renda'&&r.pais==='latam').length,resultado});
+    const semMatch=Object.values(freq).reduce((s,v)=>s+v,0);
+    const comMatch=resultado.filter(r=>r.match!=='❌ SEM MATCH').reduce((s,r)=>s+r.count,0);
+    res.json({ok:true,mes:curYM,totalDealsNoMes:dealsDoMes.length,regrasLatam:regras.filter(r=>r.tipo==='renda'&&r.pais==='latam').length,comMatch,semMatch:semMatch-comMatch,resultado});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
 
