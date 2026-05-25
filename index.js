@@ -134,10 +134,14 @@ async function carregarMetasLatam(curYM){
       const cols=parseCsvLine(line,delimC);
       const nome=String(cols[0]||'').trim();
       const subarea=normalizarTexto(cols[2]||'');
-      const mesRef=String(cols[7]||'').trim();
+      const mesRefRaw=String(cols[7]||'').trim();
       const anoRef=parseInt(cols[8]||'0');
       if(!nome)return;
-      if(subarea.includes('latam')&&mesRef===mesNome&&anoRef===ano){
+      // Aceita mês como número (5), nome (Maio) ou abreviação (Mai)
+      const mesRefNum=parseInt(mesRefRaw);
+      const mesRefNorm=normalizarTexto(mesRefRaw);
+      const mesOk=mesRefNum===mes||mesRefNorm===normalizarTexto(mesNome)||mesRefNorm===normalizarTexto(mesNome).substring(0,3);
+      if(subarea.includes('latam')&&mesOk&&anoRef===ano){
         colaboradoresLatam.add(nome);
       }
     });
@@ -152,12 +156,15 @@ async function carregarMetasLatam(curYM){
     linhasM.slice(1).forEach(line=>{
       const cols=parseCsvLine(line,delimM);
       const anoMeta=parseInt(cols[0]||'0');
-      const mesMeta=String(cols[1]||'').trim();
+      const mesMetaRaw=String(cols[1]||'').trim();
       const duMes=parseInt(cols[2]||'0');
       const nome=String(cols[3]||'').trim();
       const metaFin=parseFloat(String(cols[5]||'0').replace(/[R$\s.]/g,'').replace(',','.'))||0;
       const ramp=parseFloat(String(cols[6]||'0').replace('%','').replace(',','.'))||100;
-      if(anoMeta!==ano||mesMeta!==mesNome)return;
+      const mesMetaNum=parseInt(mesMetaRaw);
+      const mesMetaNorm=normalizarTexto(mesMetaRaw);
+      const mesMetaOk=mesMetaNum===mes||mesMetaNorm===normalizarTexto(mesNome)||mesMetaNorm===normalizarTexto(mesNome).substring(0,3);
+      if(anoMeta!==ano||!mesMetaOk)return;
       if(!colaboradoresLatam.has(nome))return;
       if(duMes>diasUteisDoMes)diasUteisDoMes=duMes;
       const metaEfetiva=metaFin*(ramp/100);
@@ -276,7 +283,7 @@ app.get('/api/report', async(req,res)=>{
       carregarFeriados().catch(e=>{console.error('feriados:',e.message);return new Set();}),
       carregarMetasLatam(curYM).catch(e=>{console.error('metas:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}),
     ]);
-    console.log('[report] deals:', allDeals.length, 'metas total:', metasData.total);
+    console.log('[report] deals:', allDeals.length, 'metas total:', metasData.total, 'closers:', Object.keys(metasData.porCloser||{}).length, 'porCloser:', JSON.stringify(Object.keys(metasData.porCloser||{})));
     const prevYM=addMonths(curYM,-1);
     const prev2YM=addMonths(curYM,-2);
     const weeks=getWeeks(8);
