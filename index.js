@@ -79,9 +79,7 @@ async function carregarFeriados(){
     const r=await fetch(FERIADOS_URL,{cache:'no-store'});
     if(!r.ok)return new Set();
     const txt=await r.text();
-    const linhas=txt.split(/
-?
-/).filter(l=>l.trim());
+    const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     const delim=linhas[0].includes('	')?'	':',';
     const feriados=new Set();
     linhas.slice(1).forEach(line=>{
@@ -128,9 +126,7 @@ async function carregarMetasLatam(curYM){
     const mesNome=mesNomes[mes-1];
 
     // Parse colaboradores → filtra LATAM pelo mês/ano de referência
-    const linhasC=txtC.split(/
-?
-/).filter(l=>l.trim());
+    const linhasC=txtC.split(/\r?\n/).filter(l=>l.trim());
     const delimC=linhasC[0].includes('	')?'	':',';
     // Colunas: Nome, Área, Subarea, Cargo, Liderança, Equipe, Status, Mês Referencia, Ano Referencia, Email
     const colaboradoresLatam=new Set();
@@ -147,9 +143,7 @@ async function carregarMetasLatam(curYM){
     });
 
     // Parse metas → filtra pelo mês/ano e nomes LATAM
-    const linhasM=txtM.split(/
-?
-/).filter(l=>l.trim());
+    const linhasM=txtM.split(/\r?\n/).filter(l=>l.trim());
     const delimM=linhasM[0].includes('	')?'	':',';
     // Colunas: Ano, Mes, Dias Uteis, Nome, Meta de Reunioes, Meta Financeira, % de Rampagem
     const porCloser={};
