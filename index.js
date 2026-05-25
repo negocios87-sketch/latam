@@ -163,7 +163,9 @@ app.get('/api/report', async(req,res)=>{
     ]);
 
     const now=new Date();
-    const curYM=now.toISOString().substring(0,7);
+    const curYM=req.query.mes&&/^\d{4}-\d{2}$/.test(req.query.mes)
+      ?req.query.mes
+      :now.toISOString().substring(0,7);
     const prevYM=addMonths(curYM,-1);
     const prev2YM=addMonths(curYM,-2);
     const weeks=getWeeks(8);
