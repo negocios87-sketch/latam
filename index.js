@@ -323,6 +323,7 @@ app.get('/api/report', async(req,res)=>{
     const AX={
       motivoMes:{},   // {motivo: {YYYY-MM: count}}
       motivoRenda:{}, // {motivo: {legenda: count}}
+      mesRenda:{},    // {YYYY-MM addTime: {legenda: count}} para perdidos
     };
 
     for(const deal of allDeals){
@@ -421,6 +422,7 @@ app.get('/api/report', async(req,res)=>{
       if(deal.status==='lost'&&deal.lost_time){
         const motivo=deal.lost_reason?.trim()||'Não informado';
         const lostYMall=toYM(deal.lost_time);
+        const addYMall=toYM(deal.add_time);
         if(lostYMall){
           if(!AX.motivoMes[motivo])AX.motivoMes[motivo]={};
           AX.motivoMes[motivo][lostYMall]=(AX.motivoMes[motivo][lostYMall]||0)+1;
@@ -428,6 +430,11 @@ app.get('/api/report', async(req,res)=>{
         const rendaLeg=getRendaLegenda(deal,regrasScore);
         if(!AX.motivoRenda[motivo])AX.motivoRenda[motivo]={};
         AX.motivoRenda[motivo][rendaLeg]=(AX.motivoRenda[motivo][rendaLeg]||0)+1;
+        // Mês de criação × Renda (para perdidos)
+        if(addYMall){
+          if(!AX.mesRenda[addYMall])AX.mesRenda[addYMall]={};
+          AX.mesRenda[addYMall][rendaLeg]=(AX.mesRenda[addYMall][rendaLeg]||0)+1;
+        }
       }
     }
 
@@ -468,7 +475,9 @@ app.get('/api/report', async(req,res)=>{
     // Meses disponíveis ordenados
     const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
     // Faixas disponíveis (ordem da planilha)
-    const faixasDisp=[...faixas.map(f=>f.legenda),'Não informado'];
+    // Deduplica faixas (Não informado pode vir das regras)
+    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
+    const faixasDisp=[...faixasSet];
 
     res.json({
       ok:true,mes:curYM,updatedAt:new Date().toISOString(),
@@ -511,6 +520,8 @@ app.get('/api/report', async(req,res)=>{
         faixasDisp,
         motivoMes:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoMes[m]||{}])),
         motivoRenda:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoRenda[m]||{}])),
+        mesRenda:AX.mesRenda,
+        mesesCriacao:[...new Set(Object.keys(AX.mesRenda))].sort(),
       },
       perdidos:{
         total:P.total,
@@ -566,7 +577,9 @@ app.get('/api/debug-renda', async(req,res)=>{
     // Meses disponíveis ordenados
     const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
     // Faixas disponíveis (ordem da planilha)
-    const faixasDisp=[...faixas.map(f=>f.legenda),'Não informado'];
+    // Deduplica faixas (Não informado pode vir das regras)
+    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
+    const faixasDisp=[...faixasSet];
 
     res.json({ok:true,mes:curYM,totalDealsNoMes:dealsDoMes.length,regrasLatam:regras.filter(r=>r.tipo==='renda'&&r.pais==='latam').length,comMatch,semMatch:semMatch-comMatch,resultado});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
@@ -602,7 +615,9 @@ app.get('/api/debug-metas', async(req,res)=>{
     // Meses disponíveis ordenados
     const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
     // Faixas disponíveis (ordem da planilha)
-    const faixasDisp=[...faixas.map(f=>f.legenda),'Não informado'];
+    // Deduplica faixas (Não informado pode vir das regras)
+    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
+    const faixasDisp=[...faixasSet];
 
     res.json({ok:true,totalLinhas2026maio:rows.length,rows});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
