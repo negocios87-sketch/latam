@@ -315,7 +315,7 @@ app.get('/api/report', async(req,res)=>{
     };
     const G={deals:[],porDia:{},porSemana:{},origemTemporal:{},vendsPorProprietario:{}};
     const P={
-      total:0,porDia:{},porSemana:{},origemTemporal:{},
+      total:0,porDia:{},porSemana:{},origemTemporal:{},deals:[],
       chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
       mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
     };
@@ -399,6 +399,13 @@ app.get('/api/report', async(req,res)=>{
           P.total++;pp.total++;
           P.porDia[lostD]=(P.porDia[lostD]||0)+1;
           pp.motivos[motivo]=(pp.motivos[motivo]||0)+1;
+          P.deals.push({
+            id:deal.id,
+            addTime:toYMD(deal.add_time),
+            lostTime:lostD,
+            proprietario:deal.owner_name||(deal.user_id&&deal.user_id.name)||'—',
+            pais,motivo,
+          });
           const legenda=getRendaLegenda(deal,regrasScore);
           if(pp.scoreFaixas[legenda]!==undefined)pp.scoreFaixas[legenda]++;
           else pp.scoreFaixas['Não informado']=(pp.scoreFaixas['Não informado']||0)+1;
@@ -507,6 +514,7 @@ app.get('/api/report', async(req,res)=>{
       },
       perdidos:{
         total:P.total,
+        deals:P.deals||[],
         mediaDia:allDays.length?+(P.total/allDays.length).toFixed(1):0,
         chile:{total:P.chile.total,pct:P.total>0?Math.round(P.chile.total/P.total*100):0,motivos:Object.entries(P.chile.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.chile.total?Math.round(c/P.chile.total*100):0})),scoreFaixas:serFaixas(P.chile.scoreFaixas,P.chile.total)},
         mexico:{total:P.mexico.total,pct:P.total>0?Math.round(P.mexico.total/P.total*100):0,motivos:Object.entries(P.mexico.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.mexico.total?Math.round(c/P.mexico.total*100):0})),scoreFaixas:serFaixas(P.mexico.scoreFaixas,P.mexico.total)},
