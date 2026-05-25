@@ -319,6 +319,11 @@ app.get('/api/report', async(req,res)=>{
       chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
       mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
     };
+    // Análises cruzadas (todos os meses disponíveis)
+    const AX={
+      motivoMes:{},   // {motivo: {YYYY-MM: count}}
+      motivoRenda:{}, // {motivo: {legenda: count}}
+    };
 
     for(const deal of allDeals){
       const pais=getPais(deal);
@@ -405,6 +410,18 @@ app.get('/api/report', async(req,res)=>{
         }
         if(lostW&&wSet.has(lostW))P.porSemana[lostW]=(P.porSemana[lostW]||0)+1;
       }
+      // Análises cruzadas — todos os perdidos (independente do mês selecionado)
+      if(deal.status==='lost'&&deal.lost_time){
+        const motivo=deal.lost_reason?.trim()||'Não informado';
+        const lostYMall=toYM(deal.lost_time);
+        if(lostYMall){
+          if(!AX.motivoMes[motivo])AX.motivoMes[motivo]={};
+          AX.motivoMes[motivo][lostYMall]=(AX.motivoMes[motivo][lostYMall]||0)+1;
+        }
+        const rendaLeg=getRendaLegenda(deal,regrasScore);
+        if(!AX.motivoRenda[motivo])AX.motivoRenda[motivo]={};
+        AX.motivoRenda[motivo][rendaLeg]=(AX.motivoRenda[motivo][rendaLeg]||0)+1;
+      }
     }
 
     // ── Dias úteis MTD ────────────────────────────────────────
@@ -433,6 +450,18 @@ app.get('/api/report', async(req,res)=>{
       {label:ymLabel(prev2YM),               v:ot.prev2||0,pct:total>0?Math.round((ot.prev2||0)/total*100):0},
       {label:`Antes de ${ymLabel(prev2YM)}`, v:ot.antes||0,pct:total>0?Math.round((ot.antes||0)/total*100):0},
     ];
+
+    // Serializa análises cruzadas
+    // Top 10 motivos globais
+    const motivoTotais={};
+    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
+      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
+    });
+    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
+    // Meses disponíveis ordenados
+    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
+    // Faixas disponíveis (ordem da planilha)
+    const faixasDisp=[...faixas.map(f=>f.legenda),'Não informado'];
 
     res.json({
       ok:true,mes:curYM,updatedAt:new Date().toISOString(),
@@ -468,6 +497,13 @@ app.get('/api/report', async(req,res)=>{
               pctMTD:metaMTD>0&&m.meta>0?+((m.receita/(m.meta*(duMTD/duMes||1)))*100).toFixed(1):0,
             })),
         },
+      },
+      analises:{
+        top10Motivos,
+        mesesDisp,
+        faixasDisp,
+        motivoMes:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoMes[m]||{}])),
+        motivoRenda:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoRenda[m]||{}])),
       },
       perdidos:{
         total:P.total,
@@ -512,6 +548,18 @@ app.get('/api/debug-renda', async(req,res)=>{
       });
     const semMatch=Object.values(freq).reduce((s,v)=>s+v,0);
     const comMatch=resultado.filter(r=>r.match!=='❌ SEM MATCH').reduce((s,r)=>s+r.count,0);
+    // Serializa análises cruzadas
+    // Top 10 motivos globais
+    const motivoTotais={};
+    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
+      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
+    });
+    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
+    // Meses disponíveis ordenados
+    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
+    // Faixas disponíveis (ordem da planilha)
+    const faixasDisp=[...faixas.map(f=>f.legenda),'Não informado'];
+
     res.json({ok:true,mes:curYM,totalDealsNoMes:dealsDoMes.length,regrasLatam:regras.filter(r=>r.tipo==='renda'&&r.pais==='latam').length,comMatch,semMatch:semMatch-comMatch,resultado});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
@@ -536,6 +584,18 @@ app.get('/api/debug-metas', async(req,res)=>{
       else if(/\.\d{3}$/.test(v))v=v.replace(/\./g,'');
       return{nome:cols[3],col5raw:cols[5],vProcessado:v,resultado:parseFloat(v)||0};
     });
+    // Serializa análises cruzadas
+    // Top 10 motivos globais
+    const motivoTotais={};
+    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
+      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
+    });
+    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
+    // Meses disponíveis ordenados
+    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
+    // Faixas disponíveis (ordem da planilha)
+    const faixasDisp=[...faixas.map(f=>f.legenda),'Não informado'];
+
     res.json({ok:true,totalLinhas2026maio:rows.length,rows});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
