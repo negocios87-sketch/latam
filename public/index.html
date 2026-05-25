@@ -333,23 +333,35 @@ function metasHtml(metas){
   const receitaAtual=metas.receitaAtual||0;
   const pctTotal=metas.total>0?+((receitaAtual/metas.total)*100).toFixed(1):0;
   const pctMTD=metas.mtd>0?+((receitaAtual/metas.mtd)*100).toFixed(1):0;
+  const colPct=(p)=>p>=100?'#4a7c6a':p>=80?'#b8873f':'#c0533a';
+  const colBg=(p)=>p>=100?'rgba(74,124,106,.15)':p>=80?'rgba(184,135,63,.12)':'rgba(192,83,58,.1)';
 
-  const colPct=(p)=>p>=100?'var(--sage)':p>=80?'var(--gold)':'var(--rust)';
-
-  const progBar=(pct,label,meta,du)=>{
+  const metaCard=(label,pct,meta,du,realizado)=>{
     const w=Math.min(pct,100);
-    const over=pct>100;
-    return`<div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
-        <span style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">${label}</span>
-        <span style="font-size:.72rem;color:var(--muted)">${brl2(meta)} · ${du} dias úteis</span>
+    const col=colPct(pct);
+    const bg=colBg(pct);
+    return`<div style="background:${bg};border:1px solid ${col}33;border-radius:10px;padding:18px 20px;flex:1">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-size:.58rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:${col};margin-bottom:4px">${label}</div>
+          <div style="font-family:'Fraunces',serif;font-size:1.6rem;font-weight:700;color:#1c2b3a;line-height:1">${brl2(meta)}</div>
+          <div style="font-size:.68rem;color:#8a8277;margin-top:3px">${du} dias úteis</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:700;color:${col};line-height:1">${pct}%</div>
+          <div style="font-size:.68rem;color:#8a8277;margin-top:3px">atingido</div>
+        </div>
       </div>
-      <div style="background:var(--border);border-radius:4px;height:10px;position:relative">
-        <div style="width:${w}%;height:10px;border-radius:4px;background:${colPct(pct)};transition:width .6s"></div>
+      <div style="background:rgba(0,0,0,.08);border-radius:6px;height:8px;margin-bottom:10px">
+        <div style="width:${w}%;height:8px;border-radius:6px;background:${col};transition:width .8s cubic-bezier(.4,0,.2,1)"></div>
       </div>
-      <div style="display:flex;justify-content:space-between;margin-top:4px">
-        <span style="font-size:.78rem;color:var(--muted)">${brl2(receitaAtual)} realizado</span>
-        <span style="font-size:.82rem;font-weight:800;color:${colPct(pct)}">${pct}%</span>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:.75rem;color:#8a8277">Realizado</span>
+        <span style="font-size:.82rem;font-weight:700;color:#1c2b3a">${brl2(realizado)}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
+        <span style="font-size:.75rem;color:#8a8277">Faltam</span>
+        <span style="font-size:.78rem;font-weight:600;color:${col}">${brl2(Math.max(0,meta-realizado))}</span>
       </div>
     </div>`;
   };
@@ -379,10 +391,12 @@ function metasHtml(metas){
         </table>
       </div>
     </div>
-    <div class="ccard">
-      <div class="ccard-ttl">Atingimento de Meta</div>
-      ${progBar(pctTotal,'Meta do Mês',metas.total,metas.duMes)}
-      ${progBar(pctMTD,'Meta MTD (pace)',metas.mtd,metas.duMTD)}
+    <div>
+      <div class="sec-lbl2" style="margin-bottom:10px">Atingimento de Meta<span></span></div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${metaCard('Meta do Mês',pctTotal,metas.total,metas.duMes,receitaAtual)}
+        ${metaCard('Meta MTD · Pace',pctMTD,metas.mtd,metas.duMTD,receitaAtual)}
+      </div>
     </div>
   </div>`;
 }
@@ -439,7 +453,7 @@ function expandTableGanhos(rows,prefix){
     <tr class="ori-row" onclick="toggleRow('${prefix}-${i}')" style="cursor:pointer">
       <td style="text-align:center;color:var(--muted);font-size:.8rem" id="${prefix}-arr-${i}">▶</td>
       <td class="td-name">${esc(o.nome)}</td>
-      <td>${fmtN(o.t)}</td><td>${brl(o.rev||0)}</td><td>${o.ticket>0?brl(o.ticket):'—'}</td>
+      <td>${fmtN(o.t)}</td><td>${brl(o.rev||0)}</td><td>${o.ticketReal>0?brl(o.ticketReal):'—'}</td>
     </tr>
     <tr id="${prefix}-${i}" style="display:none">
       <td colspan="5" style="padding:0;background:var(--bg)">${dealsSubTable(o.deals)}</td>
@@ -450,7 +464,7 @@ function expandTableGanhos(rows,prefix){
     <td style="font-weight:700;color:var(--navy)">Total</td>
     <td>${fmtN(totalV)}</td>
     <td>${brl(totalR)}</td>
-    <td style="color:var(--gold);font-weight:700">${ticketMedio>0?brl(ticketMedio):'—'}</td>
+    <td style="color:var(--gold);font-weight:700">${totalV>0?brl(rows.reduce((s,o)=>s+(o.revReal||0),0)/totalV):'—'}</td>
   </tr></tfoot>
   </table>`;
 }
@@ -495,14 +509,14 @@ function computeGanhosStats(enriched){
   const byOrigem={};
   for(const d of enriched){
     const k=d.origem||'Não classificado';
-    if(!byOrigem[k])byOrigem[k]={t:0,rev:0,deals:[]};
-    byOrigem[k].t++;byOrigem[k].rev+=d.valor;byOrigem[k].deals.push(d);
+    if(!byOrigem[k])byOrigem[k]={t:0,rev:0,revReal:0,deals:[]};
+    byOrigem[k].t++;byOrigem[k].rev+=d.valor;byOrigem[k].revReal+=d.valorReal;byOrigem[k].deals.push(d);
   }
   const ORDER=['Normal','Primeira Parcela','Outras Parcelas','Não classificado'];
   const porOrigem=Object.entries(byOrigem).sort((a,b)=>{
     const ai=ORDER.indexOf(a[0]),bi=ORDER.indexOf(b[0]);
     return(ai<0?99:ai)-(bi<0?99:bi);
-  }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,ticket:x.t?(x.deals.reduce((s,d)=>s+d.valorReal,0)/x.t):0,deals:x.deals}));
+  }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,ticketReal:x.t?(x.revReal/x.t):0,deals:x.deals}));
   return{total,receita,ticket,
     chile:{total:chile.length,receita:chile.reduce((s,d)=>s+d.valor,0)},
     mexico:{total:mexico.length,receita:mexico.reduce((s,d)=>s+d.valor,0)},
@@ -627,12 +641,7 @@ function render(){
         <div class="lbl"><span class="fi fi-mx" style="margin-right:5px;border-radius:2px"></span>México</div><div class="val" style="color:var(--mexico)">${fmtN(gStats.mexico.total)}</div>
         <div class="sub">${brl(gStats.mexico.receita)}</div></div>
     </div>
-    <div class="kpi-row kpi1">
-      <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
-        <div class="lbl">Ticket Médio Real</div>
-        <div class="val" style="font-size:1.4rem">${gStats.ticket>0?brl(gStats.ticket):'—'}</div>
-        <div class="sub">média ponderada · ticket cheio quando informado</div></div>
-    </div>
+
     ${metasHtml(ganhos.metas)}
 
     <div class="charts-1">
