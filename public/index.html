@@ -509,7 +509,6 @@ function render(){
       <div class="sec-title">Leads Criados <span class="sec-date-tag tag-criado">Mês atual · ${mes}</span></div>
       <div class="sec-divider div-latam"></div>
     </div>
-    ${insightHtml('criados')}
     <div class="kpi-row kpi5">
       <div class="kpi"><div class="kpi-accent" style="background:var(--latam)"></div>
         <div class="lbl">Total criado no mês</div><div class="val">${fmtN(criados.total)}</div>
@@ -537,13 +536,14 @@ function render(){
       <div class="ccard"><div class="ccard-ttl">Faixa de Renda · <span class="fi fi-mx"></span> México</div><div class="cwrap md"><canvas id="ch-score-mexico"></canvas></div></div>
     </div>
 
+    ${insightHtml('criados')}
+
     <!-- GANHOS -->
     <div class="sec-block">
       <div class="sec-eyebrow">Eixo temporal · Data de Ganho · Ticket Cheio quando informado na aba Classificação</div>
       <div class="sec-title">Negócios Ganhos <span class="sec-date-tag tag-ganho">Data de Ganho · ${mes}</span></div>
       <div class="sec-divider div-ganho"></div>
     </div>
-    ${insightHtml('ganhos')}
     <div class="kpi-row kpi4">
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Total vendas</div><div class="val">${fmtN(gStats.total)}</div><div class="sub">negócios ganhos</div></div>
@@ -579,13 +579,14 @@ function render(){
       </div>
     </div>
 
+    ${insightHtml('ganhos')}
+
     <!-- PERDIDOS -->
     <div class="sec-block">
       <div class="sec-eyebrow">Eixo temporal · Data de Perda</div>
       <div class="sec-title">Negócios Perdidos <span class="sec-date-tag tag-perda">Data de Perda · ${mes}</span></div>
       <div class="sec-divider div-perda"></div>
     </div>
-    ${insightHtml('perdidos')}
     <div class="kpi-row kpi3">
       <div class="kpi"><div class="kpi-accent" style="background:var(--rust)"></div>
         <div class="lbl">Total perdidos no mês</div><div class="val" style="color:var(--rust)">${fmtN(perdidos.total)}</div>
@@ -615,6 +616,8 @@ function render(){
       <div class="ot-title">Quando foi criado o lead que foi perdido</div>
       <div class="ot-rows">${otHtml(perdidos.origemTemporal,'#c0533a')}</div>
     </div>
+    ${insightHtml('perdidos')}
+
     <div class="pfooter">
       <span>Board Academy · LATAM · Inteligência Comercial</span>
       <span>Atualizado em ${new Date(DATA.updatedAt).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</span>
