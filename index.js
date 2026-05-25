@@ -284,6 +284,8 @@ app.get('/api/report', async(req,res)=>{
       carregarMetasLatam(curYM).catch(e=>{console.error('metas:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}),
     ]);
     console.log('[report] deals:', allDeals.length, 'metas total:', metasData.total, 'closers:', Object.keys(metasData.porCloser||{}).length, 'porCloser:', JSON.stringify(Object.keys(metasData.porCloser||{})));
+    // Garante estrutura mínima antes dos loops
+    const metasDataSafe={total:0,porCloser:{},diasUteisDoMes:0,...(metasData||{})};
     const prevYM=addMonths(curYM,-1);
     const prev2YM=addMonths(curYM,-2);
     const weeks=getWeeks(8);
@@ -395,7 +397,6 @@ app.get('/api/report', async(req,res)=>{
     }
 
     // ── Dias úteis MTD ────────────────────────────────────────
-    const metasDataSafe={total:0,porCloser:{},diasUteisDoMes:0,...(metasData||{})};
     const metaTotal=metasDataSafe.total||0;
     const [cyear,cmonth]=curYM.split('-');
     const inicioMes=`${curYM}-01`;
