@@ -96,8 +96,15 @@ function buildFaixas(regras){
 function emptyFaixas(faixas){return Object.fromEntries(faixas.map(f=>[f.legenda,0]));}
 
 // ── Date utils ────────────────────────────────────────────────
-const toYM  = d=>d?String(d).substring(0,7):null;
-const toYMD = d=>d?String(d).substring(0,10):null;
+// Converte datetime UTC do Pipedrive para data no fuso America/Sao_Paulo (UTC-3)
+function toLocalDate(d){
+  if(!d)return null;
+  const dt=new Date(String(d).replace(' ','T').replace(/(\.\d+)?$/, 'Z').replace(/ZZ$/,'Z'));
+  if(isNaN(dt))return String(d).substring(0,10);
+  return dt.toLocaleDateString('sv-SE',{timeZone:'America/Sao_Paulo'}); // sv-SE = YYYY-MM-DD
+}
+const toYM  = d=>d?toLocalDate(d)?.substring(0,7):null;
+const toYMD = d=>d?toLocalDate(d):null;
 function weekStart(dateStr){
   if(!dateStr)return null;
   const d=new Date(String(dateStr).substring(0,10)+'T00:00:00Z');
