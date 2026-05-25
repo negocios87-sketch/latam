@@ -599,7 +599,112 @@ function renderAnalises(){
     </table>
     </div>`;
 
-  el.innerHTML=`
+  // ── Lead Time ──────────────────────────────────────────────
+  const classMap=getClassMap();
+  const diffDias=(d1,d2)=>{
+    if(!d1||!d2)return null;
+    const diff=Math.round((new Date(d2)-new Date(d1))/(1000*60*60*24));
+    return diff<0?null:diff;
+  };
+
+  // Deals de ganho (excluindo Outras Parcelas)
+  const dealsGanho=(DATA.ganhos.deals||[]).filter(d=>{
+    const cl=classMap[String(d.id)]||{};
+    return cl.origem!=='Outras Parcelas';
+  }).map(d=>({...d,lt:diffDias(d.addTime,d.dataGanho),tipo:'ganho'})).filter(d=>d.lt!==null);
+
+  // Deals de perda
+  const dealsPerda=(DATA.perdidos.deals||[])
+    .map(d=>({...d,lt:diffDias(d.addTime,d.lostTime),tipo:'perda'})).filter(d=>d.lt!==null);
+
+  // Agrupa por mês de criação
+  const mesMap={};
+  const addToMes=(d,tipo)=>{
+    const mes=d.addTime?d.addTime.substring(0,7):null;
+    if(!mes)return;
+    if(!mesMap[mes])mesMap[mes]={ganho:[],perda:[]};
+    mesMap[mes][tipo].push(d.lt);
+  };
+  dealsGanho.forEach(d=>addToMes(d,'ganho'));
+  dealsPerda.forEach(d=>addToMes(d,'perda'));
+
+  const mesesLT=[...new Set([...dealsGanho.map(d=>d.addTime?.substring(0,7)),...dealsPerda.map(d=>d.addTime?.substring(0,7))].filter(Boolean))].sort();
+  const avg=arr=>arr.length?+(arr.reduce((s,v)=>s+v,0)/arr.length).toFixed(1):null;
+
+  // Tabela resumo
+  const tblLT=`<table>
+    <thead><tr>
+      <th>Mês Criação</th>
+      <th>Lead Time Perda (dias)</th>
+      <th>Lead Time Ganho (dias)</th>
+      <th>Lead Time Total (dias)</th>
+    </tr></thead>
+    <tbody>${mesesLT.map(mes=>{
+      const g=mesMap[mes]?.ganho||[];
+      const p=mesMap[mes]?.perda||[];
+      const total=[...g,...p];
+      return`<tr>
+        <td class="td-name">${fmtMesLabel(mes)}</td>
+        <td style="text-align:right">${avg(p)??'—'}</td>
+        <td style="text-align:right">${avg(g)??'—'}</td>
+        <td style="text-align:right;font-weight:700;color:var(--navy)">${avg(total)??'—'}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+
+  // Cohort
+  const FAIXAS_COHORT=[
+    {label:'0 dias',fn:v=>v===0},
+    {label:'1–5',fn:v=>v>=1&&v<=5},
+    {label:'6–10',fn:v=>v>=6&&v<=10},
+    {label:'11–15',fn:v=>v>=11&&v<=15},
+    {label:'16–20',fn:v=>v>=16&&v<=20},
+    {label:'21–25',fn:v=>v>=21&&v<=25},
+    {label:'26–30',fn:v=>v>=26&&v<=30},
+    {label:'>30',fn:v=>v>30},
+  ];
+
+  let cohortTipo='total'; // estado inicial
+  window._cohortTipo=window._cohortTipo||'total';
+
+  const buildCohort=(tipo)=>{
+    return mesesLT.map(mes=>{
+      let arr=[];
+      if(tipo==='ganho')arr=mesMap[mes]?.ganho||[];
+      else if(tipo==='perda')arr=mesMap[mes]?.perda||[];
+      else arr=[...(mesMap[mes]?.ganho||[]),...(mesMap[mes]?.perda||[])];
+      const total=arr.length;
+      return{mes,total,faixas:FAIXAS_COHORT.map(f=>({label:f.label,count:arr.filter(f.fn).length,pct:total>0?+(arr.filter(f.fn).length/total*100).toFixed(0):0}))};
+    });
+  };
+
+  const renderCohort=(tipo)=>{
+    const rows=buildCohort(tipo);
+    const maxPorFaixaCohort={};
+    FAIXAS_COHORT.forEach((f,fi)=>{
+      maxPorFaixaCohort[fi]=Math.max(...rows.map(r=>r.faixas[fi].count),1);
+    });
+    document.getElementById('cohort-body').innerHTML=rows.map(row=>`
+      <tr>
+        <td class="td-name">${fmtMesLabel(row.mes)}</td>
+        <td style="text-align:center;font-size:.72rem;color:var(--muted)">${row.total}</td>
+        ${row.faixas.map((f,fi)=>{
+          const bg=heatmapColor(f.count,maxPorFaixaCohort[fi]);
+          return`<td style="text-align:center;padding:7px 8px;background:${bg};font-weight:${f.count>0?'700':'400'};color:${f.count>0?'var(--navy)':'var(--border)'}">
+            ${f.count>0?f.count+'<span style="font-size:.65rem;color:var(--muted);font-weight:400;margin-left:2px">'+f.pct+'%</span>':'·'}
+          </td>`;
+        }).join('')}
+      </tr>`).join('');
+    ['ganho','perda','total'].forEach(t=>{
+      const btn=document.getElementById('cohort-btn-'+t);
+      if(btn)btn.className='gtog'+(t===tipo?' active':'');
+    });
+    window._cohortTipo=tipo;
+  };
+
+  window.switchCohort=(tipo)=>{renderCohort(tipo);};
+
+    el.innerHTML=`
     <div class="ph-row">
       <div>
         <div class="ph-badge">LATAM · Análises de Perda</div>
@@ -622,11 +727,45 @@ function renderAnalises(){
     </div>
     <div class="twrap" style="margin-bottom:32px">${tblRenda}</div>
 
+    <div class="sec-block">
+      <div class="sec-eyebrow">Velocidade do Funil</div>
+      <div class="sec-title">Lead Time Médio por Mês de Criação</div>
+      <div class="sec-divider div-latam"></div>
+    </div>
+    <div class="twrap" style="margin-bottom:24px">${tblLT}</div>
+
+    <div class="sec-block">
+      <div class="sec-eyebrow">Cohort de Lead Time</div>
+      <div class="sec-title">Distribuição por Faixa de Dias</div>
+      <div class="sec-divider div-latam"></div>
+    </div>
+    <div class="gtog-row">
+      <button class="gtog active" id="cohort-btn-total" onclick="switchCohort('total')">Total</button>
+      <button class="gtog" id="cohort-btn-ganho" onclick="switchCohort('ganho')">Ganho</button>
+      <button class="gtog" id="cohort-btn-perda" onclick="switchCohort('perda')">Perda</button>
+    </div>
+    <div class="twrap" style="margin-bottom:32px">
+      <table>
+        <thead><tr>
+          <th>Mês Criação</th><th style="text-align:center">Total</th>
+          <th style="text-align:center">0 dias</th><th style="text-align:center">1–5</th>
+          <th style="text-align:center">6–10</th><th style="text-align:center">11–15</th>
+          <th style="text-align:center">16–20</th><th style="text-align:center">21–25</th>
+          <th style="text-align:center">26–30</th><th style="text-align:center">>30</th>
+        </tr></thead>
+        <tbody id="cohort-body"></tbody>
+      </table>
+    </div>
+
     <div class="pfooter">
       <span>Board Academy · LATAM · Análises de Perda</span>
       <span>Dados históricos completos do filtro</span>
     </div>`;
+
+  // Renderiza cohort após inserir HTML
+  setTimeout(()=>renderCohort(window._cohortTipo||'total'),0);
 }
+
 
 /* ── Classificação ─────────────────────────────────────────── */
 function getClassMap(){try{return JSON.parse(localStorage.getItem('latam_class')||'{}');}catch{return{};}}
