@@ -520,16 +520,18 @@ app.get('/api/debug-metas', async(req,res)=>{
     const txt=await r.text();
     const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     const delim=linhas[0].includes('\t')?'\t':',';
-    const rows=linhas.slice(0,10).map(line=>{
+    // Filtra só maio/2026
+    const rows=linhas.filter(l=>{
+      const cols=parseCsvLine(l,delim);
+      return cols[0]==='2026'&&cols[1]==='5';
+    }).map(line=>{
       const cols=parseCsvLine(line,delim);
-      return{raw:cols,col5:cols[5],parsed:(()=>{
-        let v=String(cols[5]||'0').trim().replace(/R\$\s*/g,'').trim();
-        if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
-        else if(/\.\d{3}$/.test(v))v=v.replace(/\./g,'');
-        return{v,result:parseFloat(v)||0};
-      })()};
+      let v=String(cols[5]||'0').trim().replace(/R\$\s*/g,'').trim();
+      if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
+      else if(/\.\d{3}$/.test(v))v=v.replace(/\./g,'');
+      return{nome:cols[3],col5raw:cols[5],vProcessado:v,resultado:parseFloat(v)||0};
     });
-    res.json({ok:true,delim,rows});
+    res.json({ok:true,totalLinhas2026maio:rows.length,rows});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
 
