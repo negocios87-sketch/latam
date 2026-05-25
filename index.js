@@ -21,6 +21,18 @@ const METAS_URL          = process.env.METAS_URL
 const FERIADOS_URL       = process.env.FERIADOS_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv';
 
+// ── Cache em memória (TTL 5 min) ─────────────────────────────
+const _cache={};
+async function cachedFetch(url,ttlMs=5*60*1000){
+  const now=Date.now();
+  if(_cache[url]&&(now-_cache[url].ts)<ttlMs)return _cache[url].data;
+  const r=await fetch(url,{cache:'no-store'});
+  if(!r.ok)throw new Error(`HTTP ${r.status}`);
+  const data=await r.text();
+  _cache[url]={data,ts:now};
+  return data;
+}
+
 // ── País ──────────────────────────────────────────────────────
 function getPais(deal){
   return String(deal[PRODUCT_FIELD]||'').toLowerCase().includes('chile')?'CHILE':'MEXICO';
@@ -52,9 +64,8 @@ function parsePontuacao(v){
 
 async function carregarRegrasScore(){
   try{
-    const r=await fetch(SCORE_RULES_URL,{cache:'no-store'});
-    if(!r.ok)return[];
-    const txt=await r.text();
+    const txt=await cachedFetch(SCORE_RULES_URL).catch(()=>null);
+    if(!txt)return[];
     const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     if(!linhas.length)return[];
     const delim=linhas[0].includes('\t')?'\t':',';
@@ -76,9 +87,8 @@ async function carregarRegrasScore(){
 // ── Feriados ─────────────────────────────────────────────────
 async function carregarFeriados(){
   try{
-    const r=await fetch(FERIADOS_URL,{cache:'no-store'});
-    if(!r.ok)return new Set();
-    const txt=await r.text();
+    const txt=await cachedFetch(FERIADOS_URL).catch(()=>null);
+    if(!txt)return new Set();
     const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     const delim=linhas[0].includes('	')?'	':',';
     const feriados=new Set();
@@ -114,12 +124,11 @@ function diasUteis(de,ate,feriados){
 // ── Colaboradores + Metas ─────────────────────────────────────
 async function carregarMetasLatam(curYM){
   try{
-    const[rC,rM]=await Promise.all([
-      fetch(COLABORADORES_URL,{cache:'no-store'}),
-      fetch(METAS_URL,{cache:'no-store'}),
+    const[txtC,txtM]=await Promise.all([
+      cachedFetch(COLABORADORES_URL).catch(()=>null),
+      cachedFetch(METAS_URL).catch(()=>null),
     ]);
-    if(!rC.ok||!rM.ok)return{total:0,porCloser:{}};
-    const[txtC,txtM]=await Promise.all([rC.text(),rM.text()]);
+    if(!txtC||!txtM)return{total:0,porCloser:{},diasUteisDoMes:0};
 
     const [ano,mes]=curYM.split('-').map(Number);
     const mesNomes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -590,8 +599,8 @@ app.get('/api/debug-renda', async(req,res)=>{
 app.get('/api/debug-metas', async(req,res)=>{
   if(!API_TOKEN)return res.status(500).json({ok:false,error:'sem token'});
   try{
-    const r=await fetch(METAS_URL,{cache:'no-store'});
-    const txt=await r.text();
+    const txt=await cachedFetch(METAS_URL).catch(()=>null);
+    if(!txt)return res.status(500).json({ok:false,error:'falha ao buscar metas'});
     const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     const delim=linhas[0].includes('\t')?'\t':',';
     // Filtra só maio/2026
