@@ -100,6 +100,7 @@ async function carregarFeriados(){
 
 // Conta dias úteis (seg-sex excluindo feriados) entre duas datas inclusive
 function diasUteis(de,ate,feriados){
+  if(!feriados||typeof feriados.has!=='function')feriados=new Set();
   let count=0;
   const cur=new Date(de+'T00:00:00Z');
   const end=new Date(ate+'T00:00:00Z');
@@ -274,12 +275,14 @@ app.get('/api/report', async(req,res)=>{
       ?req.query.mes
       :now.toISOString().substring(0,7);
 
+    console.log('[report] curYM:', curYM);
     const[allDeals,regrasScore,feriados,metasData]=await Promise.all([
-      fetchByFilter(FILTER_LATAM),
-      carregarRegrasScore(),
-      carregarFeriados(),
-      carregarMetasLatam(curYM),
+      fetchByFilter(FILTER_LATAM).catch(e=>{console.error('fetchByFilter:',e.message);throw e;}),
+      carregarRegrasScore().catch(e=>{console.error('regrasScore:',e.message);return[];}),
+      carregarFeriados().catch(e=>{console.error('feriados:',e.message);return new Set();}),
+      carregarMetasLatam(curYM).catch(e=>{console.error('metas:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}),
     ]);
+    console.log('[report] deals:', allDeals.length, 'metas total:', metasData.total);
     const prevYM=addMonths(curYM,-1);
     const prev2YM=addMonths(curYM,-2);
     const weeks=getWeeks(8);
@@ -353,8 +356,8 @@ app.get('/api/report', async(req,res)=>{
           });
           // Acumula no closer
           if(metasData.porCloser[proprietario]){
-            metasData.porCloser[proprietario].vendas++;
-            metasData.porCloser[proprietario].receita+=val;
+            metasDataSafe.porCloser[proprietario].vendas++;
+            metasDataSafe.porCloser[proprietario].receita+=val;
           }
           if(!G.porDia[wonD])G.porDia[wonD]={t:0,r:0};
           G.porDia[wonD].t++;G.porDia[wonD].r+=val;
@@ -391,6 +394,8 @@ app.get('/api/report', async(req,res)=>{
     }
 
     // ── Dias úteis MTD ────────────────────────────────────────
+    const metasDataSafe={total:0,porCloser:{},diasUteisDoMes:0,...(metasData||{})};
+    const metaTotal=metasDataSafe.total||0;
     const [cyear,cmonth]=curYM.split('-');
     const inicioMes=`${curYM}-01`;
     const hoje=new Date();
@@ -399,8 +404,7 @@ app.get('/api/report', async(req,res)=>{
     const ultimoDiaMes=new Date(Date.UTC(parseInt(cyear),parseInt(cmonth),0)).toISOString().substring(0,10);
     const ateMTD=hojeStr<inicioMes?'':hojeStr>ultimoDiaMes?ultimoDiaMes:hojeStr;
     const duMTD=ateMTD?diasUteis(inicioMes,ateMTD,feriados):0;
-    const duMes=metasData.diasUteisDoMes||diasUteis(inicioMes,ultimoDiaMes,feriados);
-    const metaTotal=metasData.total||0;
+    const duMes=metasDataSafe.diasUteisDoMes||diasUteis(inicioMes,ultimoDiaMes,feriados);
     const metaMTD=duMes>0?metaTotal*(duMTD/duMes):0;
 
     // ── Serialização ──────────────────────────────────────────
@@ -439,7 +443,7 @@ app.get('/api/report', async(req,res)=>{
           mtd:metaMTD,
           duMes,duMTD,
           receitaAtual:G.deals.reduce((s,d)=>s+(d.valor||0),0),
-          porCloser:Object.entries(metasData.porCloser)
+          porCloser:Object.entries(metasDataSafe.porCloser)
             .sort((a,b)=>b[1].receita-a[1].receita)
             .map(([nome,m])=>({
               nome,
