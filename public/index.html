@@ -330,69 +330,60 @@ function mkScoreLine(id,items,col,snapItems){
 function metasHtml(metas){
   if(!metas||!metas.total)return'';
   const brl2=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
-  const pctBar=(pct,col)=>{
-    const w=Math.min(pct,100);
-    const over=pct>100;
-    return`<div style="flex:1;background:var(--border);border-radius:3px;height:7px;position:relative">
-      <div style="width:${w}%;height:7px;border-radius:3px;background:${over?'var(--sage)':col};transition:width .6s"></div>
-      ${over?`<div style="position:absolute;top:0;right:0;width:2px;height:7px;background:var(--sage);border-radius:1px"></div>`:''}
-    </div>`;
-  };
-
   const receitaAtual=metas.receitaAtual||0;
   const pctTotal=metas.total>0?+((receitaAtual/metas.total)*100).toFixed(1):0;
   const pctMTD=metas.mtd>0?+((receitaAtual/metas.mtd)*100).toFixed(1):0;
 
-  const closerRows=(metas.porCloser||[]).map(c=>{
-      const colMeta=c.pctMeta>=100?'var(--sage)':c.pctMeta>=80?'var(--gold)':'var(--rust)';
-      const colMTD=c.pctMTD>=100?'var(--sage)':c.pctMTD>=80?'var(--gold)':'var(--rust)';
-      return`<tr>
-        <td class="td-name">${esc(c.nome)}</td>
-        <td>${c.vendas}</td>
-        <td>${brl2(c.receita)}</td>
-        <td>${brl2(c.meta)}</td>
-        <td>
-          <div style="display:flex;align-items:center;gap:6px">
-            ${pctBar(c.pctMeta,'var(--latam)')}
-            <span style="font-size:.75rem;font-weight:700;width:38px;text-align:right;color:${colMeta}">${c.pctMeta}%</span>
-          </div>
-        </td>
-        <td style="font-size:.75rem;font-weight:700;color:${colMTD}">${c.pctMTD}%</td>
-      </tr>`;
-    }).join('');
+  const colPct=(p)=>p>=100?'var(--sage)':p>=80?'var(--gold)':'var(--rust)';
 
-  return`
-  <div class="kpi-row kpi4" style="margin-bottom:10px">
-    <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
-      <div class="lbl">Meta do Mês</div>
-      <div class="val" style="font-size:1.4rem">${brl2(metas.total)}</div>
-      <div class="sub">${metas.duMes} dias úteis no mês</div>
+  const progBar=(pct,label,meta,du)=>{
+    const w=Math.min(pct,100);
+    const over=pct>100;
+    return`<div style="margin-bottom:14px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+        <span style="font-size:.68rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">${label}</span>
+        <span style="font-size:.72rem;color:var(--muted)">${brl2(meta)} · ${du} dias úteis</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:10px;position:relative">
+        <div style="width:${w}%;height:10px;border-radius:4px;background:${colPct(pct)};transition:width .6s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px">
+        <span style="font-size:.78rem;color:var(--muted)">${brl2(receitaAtual)} realizado</span>
+        <span style="font-size:.82rem;font-weight:800;color:${colPct(pct)}">${pct}%</span>
+      </div>
+    </div>`;
+  };
+
+  const closerRows=(metas.porCloser||[]).map(c=>{
+    const colM=colPct(c.pctMeta);
+    const colD=colPct(c.pctMTD);
+    return`<tr>
+      <td class="td-name" style="font-size:.76rem">${esc(c.nome)}</td>
+      <td style="font-size:.76rem">${c.vendas}</td>
+      <td style="font-size:.76rem">${brl2(c.receita)}</td>
+      <td style="font-size:.76rem">${brl2(c.meta)}</td>
+      <td style="font-size:.76rem;font-weight:700;color:${colM}">${c.pctMeta}%</td>
+      <td style="font-size:.76rem;font-weight:700;color:${colD}">${c.pctMTD}%</td>
+    </tr>`;
+  }).join('');
+
+  return`<div class="side-row" style="margin-bottom:16px">
+    <div>
+      <div class="sec-lbl2" style="margin-bottom:10px">Performance por Closer<span></span></div>
+      <div class="twrap">
+        <table>
+          <thead><tr>
+            <th>Closer</th><th>Vdas</th><th>Receita</th><th>Meta</th><th>% Mês</th><th>% MTD</th>
+          </tr></thead>
+          <tbody>${closerRows||'<tr><td colspan="6" style="padding:10px;color:var(--muted);text-align:center">Sem metas cadastradas</td></tr>'}</tbody>
+        </table>
+      </div>
     </div>
-    <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
-      <div class="lbl">Meta MTD</div>
-      <div class="val" style="font-size:1.4rem">${brl2(metas.mtd)}</div>
-      <div class="sub">${metas.duMTD} dias úteis até hoje</div>
+    <div class="ccard">
+      <div class="ccard-ttl">Atingimento de Meta</div>
+      ${progBar(pctTotal,'Meta do Mês',metas.total,metas.duMes)}
+      ${progBar(pctMTD,'Meta MTD (pace)',metas.mtd,metas.duMTD)}
     </div>
-    <div class="kpi"><div class="kpi-accent" style="background:${pctTotal>=100?'var(--sage)':'var(--latam)'}"></div>
-      <div class="lbl">% Ating. Meta Mês</div>
-      <div class="val" style="color:${pctTotal>=100?'var(--sage)':pctTotal>=80?'var(--gold)':'var(--rust)'}">${pctTotal}%</div>
-      <div class="sub">${brl2(receitaAtual)} realizado</div>
-    </div>
-    <div class="kpi"><div class="kpi-accent" style="background:${pctMTD>=100?'var(--sage)':'var(--latam)'}"></div>
-      <div class="lbl">% Ating. Meta MTD</div>
-      <div class="val" style="color:${pctMTD>=100?'var(--sage)':pctMTD>=80?'var(--gold)':'var(--rust)'}">${pctMTD}%</div>
-      <div class="sub">pace até hoje</div>
-    </div>
-  </div>
-  <div class="sec-lbl2" style="margin-bottom:10px">Performance por Closer<span></span></div>
-  <div class="twrap" style="margin-bottom:16px">
-    <table>
-      <thead><tr>
-        <th>Closer</th><th>Vendas</th><th>Receita Pipe</th><th>Meta</th>
-        <th style="min-width:180px">% Meta Mês</th><th>% MTD</th>
-      </tr></thead>
-      <tbody>${closerRows||'<tr><td colspan="6" style="padding:10px;color:var(--muted);text-align:center">Nenhum closer com meta cadastrada</td></tr>'}</tbody>
-    </table>
   </div>`;
 }
 
@@ -440,6 +431,9 @@ function dealsSubTable(deals){
 
 function expandTableGanhos(rows,prefix){
   if(!rows||!rows.length)return'<div style="padding:10px;font-size:.8rem;color:var(--muted)">Nenhum dado.</div>';
+  const totalV=rows.reduce((s,o)=>s+o.t,0);
+  const totalR=rows.reduce((s,o)=>s+(o.rev||0),0);
+  const ticketMedio=totalV>0?totalR/totalV:0;
   return`<table><thead><tr><th style="width:24px"></th><th>Origem</th><th>Vendas</th><th>Receita</th><th>Ticket</th></tr></thead><tbody>
   ${rows.map((o,i)=>`
     <tr class="ori-row" onclick="toggleRow('${prefix}-${i}')" style="cursor:pointer">
@@ -450,7 +444,15 @@ function expandTableGanhos(rows,prefix){
     <tr id="${prefix}-${i}" style="display:none">
       <td colspan="5" style="padding:0;background:var(--bg)">${dealsSubTable(o.deals)}</td>
     </tr>`).join('')}
-  </tbody></table>`;
+  </tbody>
+  <tfoot><tr>
+    <td></td>
+    <td style="font-weight:700;color:var(--navy)">Total</td>
+    <td>${fmtN(totalV)}</td>
+    <td>${brl(totalR)}</td>
+    <td style="color:var(--gold);font-weight:700">${ticketMedio>0?brl(ticketMedio):'—'}</td>
+  </tr></tfoot>
+  </table>`;
 }
 
 function toggleRow(id){
