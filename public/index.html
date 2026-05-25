@@ -202,6 +202,7 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
     <div class="tab-nav">
       <button class="tab-btn active" id="btn-tab-dash" onclick="switchTab('dash')">📊 Dashboard</button>
       <button class="tab-btn" id="btn-tab-class" onclick="switchTab('class')">🏷 Classificação</button>
+      <button class="tab-btn" id="btn-tab-analises" onclick="switchTab('analises')">🔍 Análises</button>
     </div>
   </div>
   <div class="tb-right">
@@ -248,6 +249,10 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
 <div class="page" id="tab-dash">
   <div class="errbanner" id="errBanner"></div>
   <div id="content"><div class="state-wrap"><div class="spinner"></div><span>Carregando dados…</span></div></div>
+</div>
+
+<div class="page" id="tab-analises" style="display:none">
+  <div id="analises-content"><div class="state-wrap"><span>Aguardando dados…</span></div></div>
 </div>
 
 <div class="page" id="tab-class" style="display:none">
@@ -495,6 +500,132 @@ function deltaHtml(atual,anterior){
   if(Math.abs(pct)<0.5)return`<span class="kpi-delta delta-eq">= mesmo</span>`;
   const up=pct>0;
   return`<span class="kpi-delta ${up?'delta-up':'delta-dn'}">${up?'▲':'▼'} ${abs} vs snap</span>`;
+}
+
+/* ── Análises ───────────────────────────────────────────────── */
+function fmtMesLabel(ym){
+  if(!ym)return'—';
+  const[y,m]=ym.split('-');
+  return['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][+m-1]+'/'+y.slice(2);
+}
+
+function heatmapColor(val,maxVal){
+  if(!val||!maxVal)return'transparent';
+  const intensity=val/maxVal;
+  // Azul escuro (alta intensidade) → azul claro (baixa)
+  const r=Math.round(230-intensity*180);
+  const g=Math.round(238-intensity*170);
+  const b=Math.round(255-intensity*80);
+  return`rgba(${r},${g},${b},${0.3+intensity*0.7})`;
+}
+
+function heatmapTextColor(val,maxVal){
+  if(!val||!maxVal)return'var(--muted)';
+  return val/maxVal>0.5?'#1c2b3a':'#1c2b3a';
+}
+
+function renderAnalises(){
+  const el=document.getElementById('analises-content');
+  if(!DATA||!DATA.analises){el.innerHTML='<div class="state-wrap"><span>Sem dados de análise.</span></div>';return;}
+  const ax=DATA.analises;
+  const {top10Motivos,mesesDisp,faixasDisp,motivoMes,motivoRenda}=ax;
+
+  // ── Tabela Motivo × Mês ────────────────────────────────────
+  // Máximo por coluna (mês) para farol
+  const maxPorMes={};
+  mesesDisp.forEach(mes=>{
+    maxPorMes[mes]=Math.max(...top10Motivos.map(m=>motivoMes[m]?.[mes]||0),1);
+  });
+
+  const tblMes=`
+    <div style="overflow-x:auto">
+    <table style="font-size:.75rem;min-width:100%">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:160px;white-space:nowrap">Motivo de Perda</th>
+          ${mesesDisp.map(m=>`<th style="text-align:center;white-space:nowrap">${fmtMesLabel(m)}</th>`).join('')}
+          <th style="text-align:center">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${top10Motivos.map(motivo=>{
+          const totalMotivo=Object.values(motivoMes[motivo]||{}).reduce((s,v)=>s+v,0);
+          return`<tr>
+            <td style="font-weight:500;color:var(--navy);padding:8px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${esc(motivo)}">${esc(motivo.length>30?motivo.slice(0,28)+'…':motivo)}</td>
+            ${mesesDisp.map(mes=>{
+              const v=motivoMes[motivo]?.[mes]||0;
+              const bg=heatmapColor(v,maxPorMes[mes]);
+              return`<td style="text-align:center;padding:8px 10px;background:${bg};font-weight:${v>0?'700':'400'};color:${v>0?'var(--navy)':'var(--border)'}">${v||'·'}</td>`;
+            }).join('')}
+            <td style="text-align:center;font-weight:700;color:var(--navy);padding:8px 10px">${totalMotivo}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+
+  // ── Tabela Motivo × Renda ──────────────────────────────────
+  // Filtra faixas que têm algum dado
+  const faixasComDados=faixasDisp.filter(f=>top10Motivos.some(m=>motivoRenda[m]?.[f]>0));
+  const maxPorFaixa={};
+  faixasComDados.forEach(f=>{
+    maxPorFaixa[f]=Math.max(...top10Motivos.map(m=>motivoRenda[m]?.[f]||0),1);
+  });
+
+  const tblRenda=`
+    <div style="overflow-x:auto">
+    <table style="font-size:.75rem;min-width:100%">
+      <thead>
+        <tr>
+          <th style="text-align:left;min-width:160px">Motivo de Perda</th>
+          ${faixasComDados.map(f=>`<th style="text-align:center;white-space:nowrap;font-size:.6rem">${esc(f)}</th>`).join('')}
+          <th style="text-align:center">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${top10Motivos.map(motivo=>{
+          const totalMotivo=Object.values(motivoRenda[motivo]||{}).reduce((s,v)=>s+v,0);
+          return`<tr>
+            <td style="font-weight:500;color:var(--navy);padding:8px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px" title="${esc(motivo)}">${esc(motivo.length>30?motivo.slice(0,28)+'…':motivo)}</td>
+            ${faixasComDados.map(f=>{
+              const v=motivoRenda[motivo]?.[f]||0;
+              const bg=heatmapColor(v,maxPorFaixa[f]);
+              return`<td style="text-align:center;padding:8px 10px;background:${bg};font-weight:${v>0?'700':'400'};color:${v>0?'var(--navy)':'var(--border)'}">${v||'·'}</td>`;
+            }).join('')}
+            <td style="text-align:center;font-weight:700;color:var(--navy);padding:8px 10px">${totalMotivo}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    </div>`;
+
+  el.innerHTML=`
+    <div class="ph-row">
+      <div>
+        <div class="ph-badge">LATAM · Análises de Perda</div>
+        <div class="ph-ttl">Quebra de Muletas</div>
+        <div class="ph-sub">Dados históricos completos · independente do mês selecionado</div>
+      </div>
+    </div>
+
+    <div class="sec-block">
+      <div class="sec-eyebrow">Análise Temporal</div>
+      <div class="sec-title">Top 10 Motivos de Perda × Mês <span class="sec-date-tag tag-perda">Farol por coluna · mais escuro = maior volume</span></div>
+      <div class="sec-divider div-perda"></div>
+    </div>
+    <div class="twrap" style="margin-bottom:32px">${tblMes}</div>
+
+    <div class="sec-block">
+      <div class="sec-eyebrow">Análise de Perfil Financeiro</div>
+      <div class="sec-title">Top 10 Motivos de Perda × Faixa de Renda <span class="sec-date-tag tag-perda">Farol por coluna · mais escuro = maior volume</span></div>
+      <div class="sec-divider div-perda"></div>
+    </div>
+    <div class="twrap" style="margin-bottom:32px">${tblRenda}</div>
+
+    <div class="pfooter">
+      <span>Board Academy · LATAM · Análises de Perda</span>
+      <span>Dados históricos completos do filtro</span>
+    </div>`;
 }
 
 /* ── Classificação ─────────────────────────────────────────── */
@@ -855,9 +986,12 @@ function switchTab(tab){
   CURTAB=tab;
   document.getElementById('tab-dash').style.display=tab==='dash'?'block':'none';
   document.getElementById('tab-class').style.display=tab==='class'?'block':'none';
+  document.getElementById('tab-analises').style.display=tab==='analises'?'block':'none';
   document.getElementById('btn-tab-dash').className='tab-btn'+(tab==='dash'?' active':'');
   document.getElementById('btn-tab-class').className='tab-btn'+(tab==='class'?' active-class':'');
+  document.getElementById('btn-tab-analises').className='tab-btn'+(tab==='analises'?' active':'');
   if(tab==='class')renderClassificacao();
+  if(tab==='analises')renderAnalises();
 }
 
 /* ── Snapshot / Comparação ───────────────────────────────── */
