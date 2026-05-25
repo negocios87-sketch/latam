@@ -174,9 +174,8 @@ async function carregarMetasLatam(curYM){
       if(anoMeta!==ano||!mesMetaOk)return;
       if(!colaboradoresLatam.has(nome))return;
       if(duMes>diasUteisDoMes)diasUteisDoMes=duMes;
-      const metaEfetiva=metaFin*(ramp/100);
-      porCloser[nome]={meta:metaEfetiva,metaBruta:metaFin,ramp,vendas:0,receita:0,ticketCheioTotal:0};
-      totalMeta+=metaEfetiva;
+      porCloser[nome]={meta:metaFin,vendas:0,receita:0};
+      totalMeta+=metaFin;
     });
 
     return{total:totalMeta,porCloser,diasUteisDoMes};
