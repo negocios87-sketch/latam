@@ -107,23 +107,28 @@ const toYM  = d=>d?toLocalDate(d)?.substring(0,7):null;
 const toYMD = d=>d?toLocalDate(d):null;
 function weekStart(dateStr){
   if(!dateStr)return null;
+  // Semana Seg→Dom: volta até a segunda-feira da semana
   const d=new Date(String(dateStr).substring(0,10)+'T00:00:00Z');
-  const day=d.getUTCDay();
-  d.setUTCDate(d.getUTCDate()-((day-4+7)%7));
+  const day=d.getUTCDay(); // 0=Dom,1=Seg,...,6=Sab
+  d.setUTCDate(d.getUTCDate()-((day+6)%7)); // recua até segunda
   return d.toISOString().substring(0,10);
 }
 function getWeeks(n=8){
   const now=new Date();
-  const day=now.getUTCDay();
-  const currThu=new Date(now);
-  currThu.setUTCDate(now.getUTCDate()-((day-4+7)%7));
-  currThu.setUTCHours(0,0,0,0);
-  const base=new Date(currThu);
-  base.setUTCDate(currThu.getUTCDate()-7);
+  // Acha o último domingo completo
+  const day=now.getUTCDay(); // 0=Dom
+  const lastSun=new Date(now);
+  // Se hoje é domingo, a semana atual ainda não acabou → volta 1 semana
+  const daysToLastSun = day===0 ? 7 : day;
+  lastSun.setUTCDate(now.getUTCDate()-daysToLastSun);
+  lastSun.setUTCHours(0,0,0,0);
+  // Segunda-feira da semana que terminou nesse domingo
+  const lastMon=new Date(lastSun);
+  lastMon.setUTCDate(lastSun.getUTCDate()-6);
   const weeks=[];
   for(let i=n-1;i>=0;i--){
-    const d=new Date(base);
-    d.setUTCDate(base.getUTCDate()-i*7);
+    const d=new Date(lastMon);
+    d.setUTCDate(lastMon.getUTCDate()-i*7);
     weeks.push(d.toISOString().substring(0,10));
   }
   return weeks;
