@@ -159,7 +159,7 @@ async function carregarMetasLatam(curYM){
       const mesMetaRaw=String(cols[1]||'').trim();
       const duMes=parseInt(cols[2]||'0');
       const nome=String(cols[3]||'').trim();
-      const metaFin=parseFloat(String(cols[5]||'0').replace(/[R$\s.]/g,'').replace(',','.'))||0;
+      const metaFinRaw=String(cols[5]||'0').replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.').trim(); const metaFin=parseFloat(metaFinRaw)||0;
       const ramp=parseFloat(String(cols[6]||'0').replace('%','').replace(',','.'))||100;
       const mesMetaNum=parseInt(mesMetaRaw);
       const mesMetaNorm=normalizarTexto(mesMetaRaw);
