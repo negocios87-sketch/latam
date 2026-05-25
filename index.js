@@ -308,7 +308,7 @@ app.get('/api/report', async(req,res)=>{
       mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
       referidos:{total:0,a:0,g:0,p:0},
     };
-    const G={deals:[],porDia:{},porSemana:{},origemTemporal:{}};
+    const G={deals:[],porDia:{},porSemana:{},origemTemporal:{},vendsPorProprietario:{}};
     const P={
       total:0,porDia:{},porSemana:{},origemTemporal:{},
       chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
@@ -451,6 +451,7 @@ app.get('/api/report', async(req,res)=>{
           mtd:metaMTD,
           duMes,duMTD,
           receitaAtual:G.deals.reduce((s,d)=>s+(d.valor||0),0),
+          vendsPorProprietario:G.vendsPorProprietario,
           porCloser:Object.entries(metasDataSafe.porCloser)
             .sort((a,b)=>b[1].receita-a[1].receita)
             .map(([nome,m])=>({
