@@ -186,7 +186,7 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
     <span class="tb-badge">LATAM</span>
     <div class="tb-sep"></div>
     <div style="display:flex;align-items:center;gap:8px">
-      <select id="mesSel" onchange="trocarMes()" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:6px;color:#fff;font-family:'DM Sans',sans-serif;font-size:.78rem;font-weight:600;padding:5px 10px;cursor:pointer;outline:none">
+      <select id="mesSel" onchange="trocarMes()" style="background:#2d4459;border:1px solid rgba(255,255,255,.25);border-radius:6px;color:#fff;font-family:'DM Sans',sans-serif;font-size:.78rem;font-weight:600;padding:5px 10px;cursor:pointer;outline:none">
         <option value="">Carregando…</option>
       </select>
     </div>
@@ -988,15 +988,17 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
 /* ── Carregar dados ──────────────────────────────────────── */
 function popularMeses(mesAtual){
   const sel=document.getElementById('mesSel');if(!sel)return;
+  // Gera últimos 12 meses a partir de hoje (não depende do backend)
+  const hoje=new Date();
   const meses=[];
-  const[y,m]=mesAtual.split('-').map(Number);
   for(let i=0;i<12;i++){
-    const d=new Date(y,m-1-i,1);
+    const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
     const ym=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const label=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][d.getMonth()]+'/'+String(d.getFullYear()).slice(2);
     meses.push({ym,label});
   }
-  const current=sel.value||mesAtual;
+  // Mantém seleção atual se já tiver, senão usa mesAtual do backend
+  const current=sel.value&&sel.value!==''&&sel.options.length>1?sel.value:mesAtual;
   sel.innerHTML=meses.map(m=>`<option value="${m.ym}" ${m.ym===current?'selected':''}>${m.label}</option>`).join('');
 }
 
