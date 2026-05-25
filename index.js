@@ -159,7 +159,14 @@ async function carregarMetasLatam(curYM){
       const mesMetaRaw=String(cols[1]||'').trim();
       const duMes=parseInt(cols[2]||'0');
       const nome=String(cols[3]||'').trim();
-      const metaFinRaw=String(cols[5]||'0').replace(/R\$\s*/g,'').replace(/\./g,'').replace(',','.').trim(); const metaFin=parseFloat(metaFinRaw)||0;
+      const metaFin=(()=>{
+        let v=String(cols[5]||'0').trim().replace(/R\$\s*/g,'').trim();
+        // Se tem vírgula: formato BR (1.234,56 ou 77.625,00 ou 77625)
+        if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
+        // Se não tem vírgula mas tem ponto com 3 dígitos depois: milhar (103.500)
+        else if(/\.\d{3}$/.test(v))v=v.replace(/\./g,'');
+        return parseFloat(v)||0;
+      })();
       const ramp=parseFloat(String(cols[6]||'0').replace('%','').replace(',','.'))||100;
       const mesMetaNum=parseInt(mesMetaRaw);
       const mesMetaNorm=normalizarTexto(mesMetaRaw);
