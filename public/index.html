@@ -366,16 +366,27 @@ function metasHtml(metas){
     </div>`;
   };
 
-  const closerRows=(metas.porCloser||[]).map(c=>{
+  // Mescla: closers com meta + closers sem meta que têm vendas
+  const closerMap={};
+  (metas.porCloser||[]).forEach(c=>{closerMap[c.nome]=c;});
+  // Adiciona vendas de quem não tem meta (vem dos deals via enriched)
+  if(metas.vendsPorProprietario){
+    Object.entries(metas.vendsPorProprietario).forEach(([nome,v])=>{
+      if(!closerMap[nome])closerMap[nome]={nome,vendas:v.t,receita:v.r,meta:0,pctMeta:0,pctMTD:0};
+    });
+  }
+  const todosClosers=Object.values(closerMap).sort((a,b)=>b.receita-a.receita);
+  const closerRows=todosClosers.map(c=>{
     const colM=colPct(c.pctMeta);
     const colD=colPct(c.pctMTD);
+    const temMeta=c.meta>0;
     return`<tr>
       <td class="td-name" style="font-size:.76rem">${esc(c.nome)}</td>
       <td style="font-size:.76rem">${c.vendas}</td>
       <td style="font-size:.76rem">${brl2(c.receita)}</td>
-      <td style="font-size:.76rem">${brl2(c.meta)}</td>
-      <td style="font-size:.76rem;font-weight:700;color:${colM}">${c.pctMeta}%</td>
-      <td style="font-size:.76rem;font-weight:700;color:${colD}">${c.pctMTD}%</td>
+      <td style="font-size:.76rem;color:${temMeta?'inherit':'var(--muted)'}">${temMeta?brl2(c.meta):'—'}</td>
+      <td style="font-size:.76rem;font-weight:700;color:${temMeta?colM:'var(--muted)'}">${temMeta?c.pctMeta+'%':'—'}</td>
+      <td style="font-size:.76rem;font-weight:700;color:${temMeta?colD:'var(--muted)'}">${temMeta?c.pctMTD+'%':'—'}</td>
     </tr>`;
   }).join('');
 
@@ -499,9 +510,7 @@ function enrichDeals(deals,classMap){
 
 function computeGanhosStats(enriched){
   const total=enriched.length;
-  // Receita sempre do Pipe
   const receita=enriched.reduce((s,d)=>s+d.valor,0);
-  // Ticket médio usa valorReal (cheio quando informado, senão valor do Pipe)
   const somaTickets=enriched.reduce((s,d)=>s+d.valorReal,0);
   const ticket=total>0?somaTickets/total:0;
   const chile=enriched.filter(d=>d.pais==='CHILE');
@@ -516,8 +525,8 @@ function computeGanhosStats(enriched){
   const porOrigem=Object.entries(byOrigem).sort((a,b)=>{
     const ai=ORDER.indexOf(a[0]),bi=ORDER.indexOf(b[0]);
     return(ai<0?99:ai)-(bi<0?99:bi);
-  }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,ticketReal:x.t?(x.revReal/x.t):0,deals:x.deals}));
-  return{total,receita,ticket,
+  }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,revReal:x.revReal,ticketReal:x.t?(x.revReal/x.t):0,deals:x.deals}));
+  return{total,receita,ticket,somaTickets,
     chile:{total:chile.length,receita:chile.reduce((s,d)=>s+d.valor,0)},
     mexico:{total:mexico.length,receita:mexico.reduce((s,d)=>s+d.valor,0)},
     porOrigem};
