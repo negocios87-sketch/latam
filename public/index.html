@@ -400,24 +400,27 @@ function enrichDeals(deals,classMap){
 
 function computeGanhosStats(enriched){
   const total=enriched.length;
-  const receita=enriched.reduce((s,d)=>s+d.valorReal,0);
-  const ticket=total>0?receita/total:0;
+  // Receita sempre do Pipe
+  const receita=enriched.reduce((s,d)=>s+d.valor,0);
+  // Ticket médio usa valorReal (cheio quando informado, senão valor do Pipe)
+  const somaTickets=enriched.reduce((s,d)=>s+d.valorReal,0);
+  const ticket=total>0?somaTickets/total:0;
   const chile=enriched.filter(d=>d.pais==='CHILE');
   const mexico=enriched.filter(d=>d.pais==='MEXICO');
   const byOrigem={};
   for(const d of enriched){
     const k=d.origem||'Não classificado';
     if(!byOrigem[k])byOrigem[k]={t:0,rev:0,deals:[]};
-    byOrigem[k].t++;byOrigem[k].rev+=d.valorReal;byOrigem[k].deals.push(d);
+    byOrigem[k].t++;byOrigem[k].rev+=d.valor;byOrigem[k].deals.push(d);
   }
   const ORDER=['Normal','Primeira Parcela','Outras Parcelas','Não classificado'];
   const porOrigem=Object.entries(byOrigem).sort((a,b)=>{
     const ai=ORDER.indexOf(a[0]),bi=ORDER.indexOf(b[0]);
     return(ai<0?99:ai)-(bi<0?99:bi);
-  }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,ticket:x.t?x.rev/x.t:0,deals:x.deals}));
+  }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,ticket:x.t?(x.deals.reduce((s,d)=>s+d.valorReal,0)/x.t):0,deals:x.deals}));
   return{total,receita,ticket,
-    chile:{total:chile.length,receita:chile.reduce((s,d)=>s+d.valorReal,0)},
-    mexico:{total:mexico.length,receita:mexico.reduce((s,d)=>s+d.valorReal,0)},
+    chile:{total:chile.length,receita:chile.reduce((s,d)=>s+d.valor,0)},
+    mexico:{total:mexico.length,receita:mexico.reduce((s,d)=>s+d.valor,0)},
     porOrigem};
 }
 
@@ -529,7 +532,7 @@ function render(){
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Total vendas</div><div class="val">${fmtN(gStats.total)}</div><div class="sub">negócios ganhos</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
-        <div class="lbl">Receita (ticket real)</div><div class="val">${brlK(gStats.receita)}</div><div class="sub">${brl(gStats.receita)}</div></div>
+        <div class="lbl">Receita (valor Pipe)</div><div class="val">${brlK(gStats.receita)}</div><div class="sub">${brl(gStats.receita)}</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
         <div class="lbl"><span class="fi fi-cl" style="margin-right:5px;border-radius:2px"></span>Chile</div><div class="val" style="color:var(--chile)">${fmtN(gStats.chile.total)}</div>
         <div class="sub">${brl(gStats.chile.receita)}</div></div>
