@@ -178,6 +178,11 @@ async function carregarMetasLatam(curYM){
       totalMeta+=metaFin;
     });
 
+    // Adiciona colaboradores LATAM que não têm meta cadastrada
+    colaboradoresLatam.forEach(nome=>{
+      if(!porCloser[nome])porCloser[nome]={meta:0,vendas:0,receita:0};
+    });
+
     return{total:totalMeta,porCloser,diasUteisDoMes};
   }catch(e){console.warn('Metas failed:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}
 }
