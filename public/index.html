@@ -128,6 +128,15 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
 .sec-lbl2{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:0 0 10px;display:flex;align-items:center;gap:8px}
 .sec-lbl2 span{flex:1;height:1px;background:var(--border);display:block}
 
+/* ── Insights ── */
+.insight-wrap{margin:10px 0 18px;display:flex;align-items:flex-start;gap:8px}
+.insight-text{font-family:'Fraunces',serif;font-size:.9rem;font-weight:300;color:var(--gold);font-style:italic;line-height:1.5;flex:1;min-height:24px;cursor:pointer;padding:6px 10px;border-radius:6px;border:1px dashed transparent;transition:border-color .15s}
+.insight-text:empty::before{content:'✦ Clique para adicionar um insight…';color:var(--border);font-size:.8rem;font-style:italic}
+.insight-text:hover{border-color:rgba(184,135,63,.3);background:rgba(184,135,63,.04)}
+.insight-edit{width:100%;font-family:'Fraunces',serif;font-size:.9rem;font-weight:300;color:var(--gold);font-style:italic;line-height:1.5;padding:6px 10px;border-radius:6px;border:1px solid rgba(184,135,63,.4);background:rgba(184,135,63,.06);outline:none;resize:vertical;min-height:56px;display:none}
+.insight-icon{color:rgba(184,135,63,.4);font-size:.75rem;margin-top:8px;cursor:pointer;flex-shrink:0;transition:color .15s}
+.insight-icon:hover{color:var(--gold)}
+
 .state-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;gap:14px;color:var(--muted)}
 .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -500,6 +509,7 @@ function render(){
       <div class="sec-title">Leads Criados <span class="sec-date-tag tag-criado">Mês atual · ${mes}</span></div>
       <div class="sec-divider div-latam"></div>
     </div>
+    ${insightHtml('criados')}
     <div class="kpi-row kpi5">
       <div class="kpi"><div class="kpi-accent" style="background:var(--latam)"></div>
         <div class="lbl">Total criado no mês</div><div class="val">${fmtN(criados.total)}</div>
@@ -533,6 +543,7 @@ function render(){
       <div class="sec-title">Negócios Ganhos <span class="sec-date-tag tag-ganho">Data de Ganho · ${mes}</span></div>
       <div class="sec-divider div-ganho"></div>
     </div>
+    ${insightHtml('ganhos')}
     <div class="kpi-row kpi4">
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Total vendas</div><div class="val">${fmtN(gStats.total)}</div><div class="sub">negócios ganhos</div></div>
@@ -574,6 +585,7 @@ function render(){
       <div class="sec-title">Negócios Perdidos <span class="sec-date-tag tag-perda">Data de Perda · ${mes}</span></div>
       <div class="sec-divider div-perda"></div>
     </div>
+    ${insightHtml('perdidos')}
     <div class="kpi-row kpi3">
       <div class="kpi"><div class="kpi-accent" style="background:var(--rust)"></div>
         <div class="lbl">Total perdidos no mês</div><div class="val" style="color:var(--rust)">${fmtN(perdidos.total)}</div>
@@ -986,6 +998,61 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
 }
 
 /* ── Carregar dados ──────────────────────────────────────── */
+/* ── Insights ── */
+const INSIGHT_KEYS=['criados','ganhos','perdidos'];
+function getInsights(){try{return JSON.parse(localStorage.getItem('latam_insights')||'{}');}catch{return{};}}
+function saveInsights(m){localStorage.setItem('latam_insights',JSON.stringify(m));}
+
+function insightHtml(key){
+  const val=getInsights()[key]||'';
+  return`<div class="insight-wrap">
+    <span class="insight-icon" onclick="editInsight('${key}')" title="Editar insight">✦</span>
+    <div class="insight-text" id="insight-text-${key}" onclick="editInsight('${key}')">${val?escInsight(val):''}</div>
+    <textarea class="insight-edit" id="insight-edit-${key}" onblur="saveInsight('${key}')" onkeydown="if(event.key==='Escape')cancelInsight('${key}')">${val}</textarea>
+  </div>`;
+}
+
+function escInsight(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+
+function editInsight(key){
+  const txt=document.getElementById('insight-text-'+key);
+  const edit=document.getElementById('insight-edit-'+key);
+  if(!txt||!edit)return;
+  txt.style.display='none';
+  edit.style.display='block';
+  edit.focus();edit.select();
+}
+
+function saveInsight(key){
+  const txt=document.getElementById('insight-text-'+key);
+  const edit=document.getElementById('insight-edit-'+key);
+  if(!txt||!edit)return;
+  const val=edit.value.trim();
+  const m=getInsights();
+  if(val)m[key]=val;else delete m[key];
+  saveInsights(m);
+  txt.innerHTML=val?escInsight(val):'';
+  txt.style.display='block';
+  edit.style.display='none';
+}
+
+function cancelInsight(key){
+  const txt=document.getElementById('insight-text-'+key);
+  const edit=document.getElementById('insight-edit-'+key);
+  if(!txt||!edit)return;
+  edit.value=getInsights()[key]||'';
+  txt.style.display='block';edit.style.display='none';
+}
+
+function exportarInsights(){
+  const data=getInsights();
+  if(!Object.keys(data).length){alert('Nenhum insight salvo.');return;}
+  const blob=new Blob([JSON.stringify({exportadoEm:new Date().toISOString(),insights:data},null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');
+  a.href=url;a.download=`insights-latam-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();URL.revokeObjectURL(url);
+}
+
 function popularMeses(mesAtual){
   const sel=document.getElementById('mesSel');if(!sel)return;
   // Gera últimos 12 meses a partir de hoje (não depende do backend)
