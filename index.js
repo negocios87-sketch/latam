@@ -511,5 +511,27 @@ app.get('/api/debug-renda', async(req,res)=>{
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
 
+
+// ── DEBUG: metas raw ─────────────────────────────────────────
+app.get('/api/debug-metas', async(req,res)=>{
+  if(!API_TOKEN)return res.status(500).json({ok:false,error:'sem token'});
+  try{
+    const r=await fetch(METAS_URL,{cache:'no-store'});
+    const txt=await r.text();
+    const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
+    const delim=linhas[0].includes('\t')?'\t':',';
+    const rows=linhas.slice(0,10).map(line=>{
+      const cols=parseCsvLine(line,delim);
+      return{raw:cols,col5:cols[5],parsed:(()=>{
+        let v=String(cols[5]||'0').trim().replace(/R\$\s*/g,'').trim();
+        if(v.includes(','))v=v.replace(/\./g,'').replace(',','.');
+        else if(/\.\d{3}$/.test(v))v=v.replace(/\./g,'');
+        return{v,result:parseFloat(v)||0};
+      })()};
+    });
+    res.json({ok:true,delim,rows});
+  }catch(e){res.status(500).json({ok:false,error:e.message});}
+});
+
 if(process.env.NODE_ENV!=='production')app.listen(PORT,()=>console.log(`✓ Porta ${PORT}`));
 module.exports=app;
