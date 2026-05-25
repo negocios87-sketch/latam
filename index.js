@@ -14,6 +14,12 @@ const REFERIDO_FIELD     = '54fc9258843cdf7ea126b6c5aca9d4dc93a3a718';
 const FIELD_RENDA        = 'c95b2c453828853409c0a1f5d5f1a6ab30eebebf';
 const SCORE_RULES_URL    = process.env.SCORE_RULES_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=422517996&single=true&output=csv';
+const COLABORADORES_URL  = process.env.COLABORADORES_URL
+  || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv';
+const METAS_URL          = process.env.METAS_URL
+  || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv';
+const FERIADOS_URL       = process.env.FERIADOS_URL
+  || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv';
 
 // ── País ──────────────────────────────────────────────────────
 function getPais(deal){
@@ -65,6 +71,107 @@ async function carregarRegrasScore(){
       };
     }).filter(r=>r.tipo&&r.pontuacao!==null);
   }catch(e){console.warn('Score rules failed:',e.message);return[];}
+}
+
+// ── Feriados ─────────────────────────────────────────────────
+async function carregarFeriados(){
+  try{
+    const r=await fetch(FERIADOS_URL,{cache:'no-store'});
+    if(!r.ok)return new Set();
+    const txt=await r.text();
+    const linhas=txt.split(/
+?
+/).filter(l=>l.trim());
+    const delim=linhas[0].includes('	')?'	':',';
+    const feriados=new Set();
+    linhas.slice(1).forEach(line=>{
+      const cols=parseCsvLine(line,delim);
+      const raw=String(cols[0]||'').trim(); // dd/mm/aaaa
+      if(!raw)return;
+      const parts=raw.split('/');
+      if(parts.length===3){
+        const [d,m,y]=parts;
+        feriados.add(`${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`);
+      }
+    });
+    return feriados;
+  }catch(e){console.warn('Feriados failed:',e.message);return new Set();}
+}
+
+// Conta dias úteis (seg-sex excluindo feriados) entre duas datas inclusive
+function diasUteis(de,ate,feriados){
+  let count=0;
+  const cur=new Date(de+'T00:00:00Z');
+  const end=new Date(ate+'T00:00:00Z');
+  while(cur<=end){
+    const dow=cur.getUTCDay();
+    const ymd=cur.toISOString().substring(0,10);
+    if(dow>=1&&dow<=5&&!feriados.has(ymd))count++;
+    cur.setUTCDate(cur.getUTCDate()+1);
+  }
+  return count;
+}
+
+// ── Colaboradores + Metas ─────────────────────────────────────
+async function carregarMetasLatam(curYM){
+  try{
+    const[rC,rM]=await Promise.all([
+      fetch(COLABORADORES_URL,{cache:'no-store'}),
+      fetch(METAS_URL,{cache:'no-store'}),
+    ]);
+    if(!rC.ok||!rM.ok)return{total:0,porCloser:{}};
+    const[txtC,txtM]=await Promise.all([rC.text(),rM.text()]);
+
+    const [ano,mes]=curYM.split('-').map(Number);
+    const mesNomes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+    const mesNome=mesNomes[mes-1];
+
+    // Parse colaboradores → filtra LATAM pelo mês/ano de referência
+    const linhasC=txtC.split(/
+?
+/).filter(l=>l.trim());
+    const delimC=linhasC[0].includes('	')?'	':',';
+    // Colunas: Nome, Área, Subarea, Cargo, Liderança, Equipe, Status, Mês Referencia, Ano Referencia, Email
+    const colaboradoresLatam=new Set();
+    linhasC.slice(1).forEach(line=>{
+      const cols=parseCsvLine(line,delimC);
+      const nome=String(cols[0]||'').trim();
+      const subarea=normalizarTexto(cols[2]||'');
+      const mesRef=String(cols[7]||'').trim();
+      const anoRef=parseInt(cols[8]||'0');
+      if(!nome)return;
+      if(subarea.includes('latam')&&mesRef===mesNome&&anoRef===ano){
+        colaboradoresLatam.add(nome);
+      }
+    });
+
+    // Parse metas → filtra pelo mês/ano e nomes LATAM
+    const linhasM=txtM.split(/
+?
+/).filter(l=>l.trim());
+    const delimM=linhasM[0].includes('	')?'	':',';
+    // Colunas: Ano, Mes, Dias Uteis, Nome, Meta de Reunioes, Meta Financeira, % de Rampagem
+    const porCloser={};
+    let totalMeta=0;
+    let diasUteisDoMes=0;
+    linhasM.slice(1).forEach(line=>{
+      const cols=parseCsvLine(line,delimM);
+      const anoMeta=parseInt(cols[0]||'0');
+      const mesMeta=String(cols[1]||'').trim();
+      const duMes=parseInt(cols[2]||'0');
+      const nome=String(cols[3]||'').trim();
+      const metaFin=parseFloat(String(cols[5]||'0').replace(/[R$\s.]/g,'').replace(',','.'))||0;
+      const ramp=parseFloat(String(cols[6]||'0').replace('%','').replace(',','.'))||100;
+      if(anoMeta!==ano||mesMeta!==mesNome)return;
+      if(!colaboradoresLatam.has(nome))return;
+      if(duMes>diasUteisDoMes)diasUteisDoMes=duMes;
+      const metaEfetiva=metaFin*(ramp/100);
+      porCloser[nome]={meta:metaEfetiva,metaBruta:metaFin,ramp,vendas:0,receita:0,ticketCheioTotal:0};
+      totalMeta+=metaEfetiva;
+    });
+
+    return{total:totalMeta,porCloser,diasUteisDoMes};
+  }catch(e){console.warn('Metas failed:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}
 }
 
 // Retorna legenda da faixa de renda do deal (filtra LATAM)
@@ -162,15 +269,17 @@ async function fetchByFilter(filterId){
 app.get('/api/report', async(req,res)=>{
   if(!API_TOKEN)return res.status(500).json({ok:false,error:'PIPEDRIVE_TOKEN não configurado.'});
   try{
-    const[allDeals,regrasScore]=await Promise.all([
-      fetchByFilter(FILTER_LATAM),
-      carregarRegrasScore(),
-    ]);
-
     const now=new Date();
     const curYM=req.query.mes&&/^\d{4}-\d{2}$/.test(req.query.mes)
       ?req.query.mes
       :now.toISOString().substring(0,7);
+
+    const[allDeals,regrasScore,feriados,metasData]=await Promise.all([
+      fetchByFilter(FILTER_LATAM),
+      carregarRegrasScore(),
+      carregarFeriados(),
+      carregarMetasLatam(curYM),
+    ]);
     const prevYM=addMonths(curYM,-1);
     const prev2YM=addMonths(curYM,-2);
     const weeks=getWeeks(8);
@@ -236,12 +345,17 @@ app.get('/api/report', async(req,res)=>{
           if(addYM===curYM)tempCat='cur';
           else if(addYM===prevYM)tempCat='prev';
           else if(addYM===prev2YM)tempCat='prev2';
+          const proprietario=deal.owner_name||(deal.user_id&&deal.user_id.name)||'—';
           G.deals.push({
             id:deal.id,titulo:deal.title||'—',pais,
-            dataGanho:wonD,valor:val,
-            proprietario:deal.owner_name||(deal.user_id&&deal.user_id.name)||'—',
+            dataGanho:wonD,valor:val,proprietario,
             addTime:toYMD(deal.add_time),
           });
+          // Acumula no closer
+          if(metasData.porCloser[proprietario]){
+            metasData.porCloser[proprietario].vendas++;
+            metasData.porCloser[proprietario].receita+=val;
+          }
           if(!G.porDia[wonD])G.porDia[wonD]={t:0,r:0};
           G.porDia[wonD].t++;G.porDia[wonD].r+=val;
           G.origemTemporal[tempCat]=(G.origemTemporal[tempCat]||0)+1;
@@ -276,6 +390,19 @@ app.get('/api/report', async(req,res)=>{
       }
     }
 
+    // ── Dias úteis MTD ────────────────────────────────────────
+    const [cyear,cmonth]=curYM.split('-');
+    const inicioMes=`${curYM}-01`;
+    const hoje=new Date();
+    const hojeStr=hoje.toISOString().substring(0,10);
+    // Se o mês selecionado é futuro, duMTD=0; se passado, usa último dia do mês
+    const ultimoDiaMes=new Date(Date.UTC(parseInt(cyear),parseInt(cmonth),0)).toISOString().substring(0,10);
+    const ateMTD=hojeStr<inicioMes?'':hojeStr>ultimoDiaMes?ultimoDiaMes:hojeStr;
+    const duMTD=ateMTD?diasUteis(inicioMes,ateMTD,feriados):0;
+    const duMes=metasData.diasUteisDoMes||diasUteis(inicioMes,ultimoDiaMes,feriados);
+    const metaTotal=metasData.total||0;
+    const metaMTD=duMes>0?metaTotal*(duMTD/duMes):0;
+
     // ── Serialização ──────────────────────────────────────────
     const MES_NOMES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     const ymLabel=ym=>{const[y,m]=ym.split('-');return MES_NOMES[+m-1]+'/'+y.slice(2);};
@@ -307,6 +434,22 @@ app.get('/api/report', async(req,res)=>{
         porSemana:weeks.map(w=>({w,v:G.porSemana[w]?.t||0,r:G.porSemana[w]?.r||0})),
         origemTemporal:origTemporalSer(G.origemTemporal,G.deals.length),
         deals:G.deals,
+        metas:{
+          total:metaTotal,
+          mtd:metaMTD,
+          duMes,duMTD,
+          receitaAtual:G.deals.reduce((s,d)=>s+(d.valor||0),0),
+          porCloser:Object.entries(metasData.porCloser)
+            .sort((a,b)=>b[1].receita-a[1].receita)
+            .map(([nome,m])=>({
+              nome,
+              meta:m.meta,
+              vendas:m.vendas,
+              receita:m.receita,
+              pctMeta:m.meta>0?+((m.receita/m.meta)*100).toFixed(1):0,
+              pctMTD:metaMTD>0&&m.meta>0?+((m.receita/(m.meta*(duMTD/duMes||1)))*100).toFixed(1):0,
+            })),
+        },
       },
       perdidos:{
         total:P.total,
