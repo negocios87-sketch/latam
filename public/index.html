@@ -250,7 +250,7 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
 
 <div class="page" id="tab-dash">
   <div class="errbanner" id="errBanner"></div>
-  <div id="content"><div class="state-wrap"><div class="spinner"></div><span>Carregando dados…</span></div></div>
+  <div id="content"><div class="state-wrap"><div class="spinner"></div><span id="loading-msg">Carregando dados do mês…</span></div></div>
 </div>
 
 <div class="page" id="tab-fechamento" style="display:none">
@@ -1727,17 +1727,43 @@ async function loadData(){
     const url='/api/report'+(mesSel?`?mes=${mesSel}`:'');
     const r=await fetch(url);const j=await r.json();
     if(!j.ok)throw new Error(j.error);
-    DATA=j;popularMeses(j.mes);render();
+    DATA=j;render();
     document.getElementById('btnComparar').disabled=false;
     document.getElementById('btnPdf').disabled=false;
+    loadHistorico();
   }catch(e){
     err.textContent=`Erro ao carregar: ${e.message}`;err.style.display='block';
     document.getElementById('content').innerHTML='<div class="state-wrap"><span>Não foi possível carregar os dados.</span></div>';
   }
 }
+
+async function loadHistorico(){
+  const btnF=document.getElementById('btn-tab-fechamento');
+  const btnA=document.getElementById('btn-tab-analises');
+  try{
+    if(btnF)btnF.textContent='📅 Fechamento ⏳';
+    if(btnA)btnA.textContent='🔍 Análises ⏳';
+    const r=await fetch('/api/historico');
+    const j=await r.json();
+    if(!j.ok)throw new Error(j.error);
+    DATA.historico=j.historico;
+    DATA.analises=j.analises;
+    if(btnF)btnF.textContent='📅 Fechamento';
+    if(btnA)btnA.textContent='🔍 Análises';
+    if(CURTAB==='fechamento')renderFechamento();
+    if(CURTAB==='analises')renderAnalises();
+  }catch(e){
+    console.warn('Histórico falhou:',e.message);
+    if(btnF)btnF.textContent='📅 Fechamento ⚠';
+    if(btnA)btnA.textContent='🔍 Análises ⚠';
+  }
+}
+
+
 async function doRefresh(){
   const btn=document.getElementById('btnRefresh');btn.disabled=true;btn.textContent='↺ Atualizando…';
-  document.getElementById('content').innerHTML='<div class="state-wrap"><div class="spinner"></div><span>Atualizando…</span></div>';
+  document.getElementById('content').innerHTML='<div class="state-wrap"><div class="spinner"></div><span id="loading-msg">Carregando dados do mês…</span></div>';
+  DATA=null;
   await loadData();btn.disabled=false;btn.textContent='↺ Atualizar';
 }
 loadData();
