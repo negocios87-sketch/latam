@@ -137,6 +137,7 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
 .insight-icon{color:rgba(184,135,63,.4);font-size:.75rem;margin-top:8px;cursor:pointer;flex-shrink:0;transition:color .15s}
 .insight-icon:hover{color:var(--gold)}
 
+.bar-highlight{background:var(--latam)!important;border-color:var(--latam)!important}
 .state-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:360px;gap:14px;color:var(--muted)}
 .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--gold);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -201,6 +202,7 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
     </div>
     <div class="tab-nav">
       <button class="tab-btn active" id="btn-tab-dash" onclick="switchTab('dash')">📊 Dashboard</button>
+      <button class="tab-btn" id="btn-tab-fechamento" onclick="switchTab('fechamento')">📅 Fechamento</button>
       <button class="tab-btn" id="btn-tab-class" onclick="switchTab('class')">🏷 Classificação</button>
       <button class="tab-btn" id="btn-tab-analises" onclick="switchTab('analises')">🔍 Análises</button>
     </div>
@@ -249,6 +251,10 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
 <div class="page" id="tab-dash">
   <div class="errbanner" id="errBanner"></div>
   <div id="content"><div class="state-wrap"><div class="spinner"></div><span>Carregando dados…</span></div></div>
+</div>
+
+<div class="page" id="tab-fechamento" style="display:none">
+  <div id="fechamento-content"><div class="state-wrap"><span>Aguardando dados…</span></div></div>
 </div>
 
 <div class="page" id="tab-analises" style="display:none">
@@ -500,6 +506,316 @@ function deltaHtml(atual,anterior){
   if(Math.abs(pct)<0.5)return`<span class="kpi-delta delta-eq">= mesmo</span>`;
   const up=pct>0;
   return`<span class="kpi-delta ${up?'delta-up':'delta-dn'}">${up?'▲':'▼'} ${abs} vs snap</span>`;
+}
+
+/* ── Fechamento ─────────────────────────────────────────────── */
+let FECH_MES = null; // mês selecionado no fechamento
+
+function renderFechamento(){
+  const el=document.getElementById('fechamento-content');
+  if(!DATA||!DATA.historico){el.innerHTML='<div class="state-wrap"><span>Sem dados históricos.</span></div>';return;}
+  const hist=DATA.historico;
+  const meses=hist.meses||[];
+  if(!meses.length){el.innerHTML='<div class="state-wrap"><span>Sem dados históricos disponíveis.</span></div>';return;}
+
+  // Mês de fechamento — padrão = mais recente
+  if(!FECH_MES||!meses.includes(FECH_MES))FECH_MES=meses[meses.length-1];
+
+  // 5 meses: fechamento + 4 anteriores
+  const idxFech=meses.indexOf(FECH_MES);
+  const meses5=meses.slice(Math.max(0,idxFech-4),idxFech+1);
+
+  const classMap=getClassMap();
+
+  // ── Ticket Médio Real por mês (via deals + classMap) ──
+  const ticketMedioPorMes={};
+  meses5.forEach(ym=>{
+    const deals=(hist.ganhos[ym]?.deals||[]).filter(d=>{
+      const cl=classMap[String(d.id)]||{};
+      return cl.origem!=='Outras Parcelas';
+    });
+    if(!deals.length){ticketMedioPorMes[ym]=0;return;}
+    const soma=deals.reduce((s,d)=>{
+      const cl=classMap[String(d.id)]||{};
+      return s+((cl.ticketCheio&&Number(cl.ticketCheio)>0)?Number(cl.ticketCheio):d.valor);
+    },0);
+    ticketMedioPorMes[ym]=deals.length?soma/deals.length:0;
+  });
+
+  el.innerHTML=buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap);
+
+  // Renderiza gráficos após inserir HTML
+  setTimeout(()=>{
+    renderGraficosFechamento(meses5,hist,ticketMedioPorMes);
+  },0);
+}
+
+function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
+  const mes=FECH_MES;
+  const brl2=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+  const brlK2=n=>n>=1000?'R$'+(n/1000).toFixed(0)+'k':'R$'+Math.round(n);
+  const fmtN2=n=>Math.round(n).toLocaleString('pt-BR');
+
+  // KPIs do mês de fechamento
+  const criadosMes=(hist.criados.total[mes]||0);
+  const criadosChile=(hist.criados.chile[mes]||0);
+  const criadosMex=(hist.criados.mexico[mes]||0);
+  const ganhosMes=hist.ganhos[mes]||{t:0,r:0};
+  const perdMes=hist.perdidos[mes]||{total:0,chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
+
+  // Receita real do mês
+  const dealsGanhosMes=(ganhosMes.deals||[]).filter(d=>{
+    const cl=classMap[String(d.id)]||{};return cl.origem!=='Outras Parcelas';
+  });
+  const receitaReal=dealsGanhosMes.reduce((s,d)=>{
+    const cl=classMap[String(d.id)]||{};
+    return s+((cl.ticketCheio&&Number(cl.ticketCheio)>0)?Number(cl.ticketCheio):d.valor);
+  },0);
+  const receitaPipe=ganhosMes.r||0;
+
+  // Motivos últimos 3 meses (2 anteriores + fechamento)
+  const idxF=hist.meses.indexOf(mes);
+  const meses3=hist.meses.slice(Math.max(0,idxF-2),idxF+1);
+
+  // Top motivos globais dos 3 meses
+  const motivoCount={};
+  meses3.forEach(ym=>{
+    const p=hist.perdidos[ym]||{};
+    ['chile','mexico'].forEach(pais=>{
+      Object.entries(p[pais]?.motivos||{}).forEach(([m,c])=>{
+        motivoCount[m]=(motivoCount[m]||0)+c;
+      });
+    });
+  });
+  const topMotivos=Object.entries(motivoCount).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([m])=>m);
+
+  // Tabela motivos 3 meses por país
+  const motivosTable=(pais)=>`
+    <table>
+      <thead><tr>
+        <th>Motivo</th>
+        ${meses3.map(ym=>`<th style="text-align:center">${fmtMesLabel(ym)}</th>`).join('')}
+      </tr></thead>
+      <tbody>${topMotivos.map(motivo=>{
+        const vals=meses3.map(ym=>{
+          const total=(hist.perdidos[ym]?.[pais]?.total)||1;
+          const c=(hist.perdidos[ym]?.[pais]?.motivos?.[motivo])||0;
+          return{c,pct:total>0?Math.round(c/total*100):0};
+        });
+        const maxC=Math.max(...vals.map(v=>v.c),1);
+        return`<tr>
+          <td class="td-name" style="font-size:.76rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(motivo)}">${esc(motivo.length>28?motivo.slice(0,26)+'…':motivo)}</td>
+          ${vals.map(v=>{
+            const bg=heatmapColor(v.c,maxC);
+            return`<td style="text-align:center;padding:7px 10px;background:${bg};font-size:.76rem">
+              ${v.c>0?`<span style="font-weight:700">${v.c}</span> <span style="font-size:.68rem;color:var(--muted)">${v.pct}%</span>`:'·'}
+            </td>`;
+          }).join('')}
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+
+  const selectorOpts=hist.meses.slice().reverse().map(ym=>
+    `<option value="${ym}" ${ym===mes?'selected':''}>${fmtMesLabel(ym)}</option>`
+  ).join('');
+
+  return`
+    <div class="ph-row">
+      <div>
+        <div class="ph-badge">LATAM · Fechamento Mensal</div>
+        <div class="ph-ttl">Fechamento · ${fmtMesLabel(mes)}</div>
+        <div class="ph-sub">Visão consolidada do mês + comparativo histórico</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:.75rem;color:var(--muted)">Mês do fechamento:</span>
+        <select onchange="FECH_MES=this.value;renderFechamento()" style="background:var(--navy);border:1px solid var(--border);border-radius:6px;color:#fff;font-family:'DM Sans',sans-serif;font-size:.82rem;font-weight:600;padding:7px 12px;cursor:pointer;outline:none">
+          ${selectorOpts}
+        </select>
+      </div>
+    </div>
+
+    <!-- CRIADOS -->
+    <div class="sec-block">
+      <div class="sec-eyebrow">Eixo temporal · Data de Criação</div>
+      <div class="sec-title">Leads Criados <span class="sec-date-tag tag-criado">${fmtMesLabel(mes)}</span></div>
+      <div class="sec-divider div-latam"></div>
+    </div>
+    <div class="kpi-row kpi3">
+      <div class="kpi"><div class="kpi-accent" style="background:var(--latam)"></div>
+        <div class="lbl">Total · ${fmtMesLabel(mes)}</div><div class="val">${fmtN2(criadosMes)}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
+        <div class="lbl">Chile</div><div class="val" style="color:var(--chile)">${fmtN2(criadosChile)}</div>
+        <div class="sub">${criadosMes>0?Math.round(criadosChile/criadosMes*100):0}% do total</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
+        <div class="lbl">México</div><div class="val" style="color:var(--mexico)">${fmtN2(criadosMex)}</div>
+        <div class="sub">${criadosMes>0?Math.round(criadosMex/criadosMes*100):0}% do total</div></div>
+    </div>
+    <div class="charts-1">
+      <div class="ccard"><div class="ccard-ttl">Volume de Criados · últimos 5 meses</div>
+        <div class="cwrap md"><canvas id="fech-cri-mes"></canvas></div></div>
+    </div>
+
+    <!-- GANHOS -->
+    <div class="sec-block">
+      <div class="sec-eyebrow">Eixo temporal · Data de Ganho</div>
+      <div class="sec-title">Negócios Ganhos <span class="sec-date-tag tag-ganho">${fmtMesLabel(mes)}</span></div>
+      <div class="sec-divider div-ganho"></div>
+    </div>
+    <div class="kpi-row kpi3">
+      <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
+        <div class="lbl">Vendas</div><div class="val">${fmtN2(ganhosMes.t||0)}</div><div class="sub">negócios ganhos</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
+        <div class="lbl">Receita Pipe</div><div class="val">${brlK2(receitaPipe)}</div><div class="sub">${brl2(receitaPipe)}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
+        <div class="lbl">Ticket Médio Real</div>
+        <div class="val" style="color:var(--gold)">${ticketMedioPorMes[mes]>0?brlK2(ticketMedioPorMes[mes]):'—'}</div>
+        <div class="sub">cheio quando informado</div></div>
+    </div>
+    <div class="charts-2">
+      <div class="ccard"><div class="ccard-ttl">Receita Pipe · últimos 5 meses</div>
+        <div class="cwrap md"><canvas id="fech-gan-receita"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Ticket Médio Real · últimos 5 meses</div>
+        <div class="cwrap md"><canvas id="fech-gan-ticket"></canvas></div></div>
+    </div>
+
+    <!-- PERDIDOS -->
+    <div class="sec-block">
+      <div class="sec-eyebrow">Eixo temporal · Data de Perda</div>
+      <div class="sec-title">Negócios Perdidos <span class="sec-date-tag tag-perda">${fmtMesLabel(mes)}</span></div>
+      <div class="sec-divider div-perda"></div>
+    </div>
+    <div class="kpi-row kpi3">
+      <div class="kpi"><div class="kpi-accent" style="background:var(--rust)"></div>
+        <div class="lbl">Total Perdidos</div><div class="val" style="color:var(--rust)">${fmtN2(perdMes.total||0)}</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
+        <div class="lbl">Chile</div><div class="val" style="color:var(--chile)">${fmtN2(perdMes.chile?.total||0)}</div>
+        <div class="sub">${perdMes.total>0?Math.round((perdMes.chile?.total||0)/perdMes.total*100):0}% do total</div></div>
+      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
+        <div class="lbl">México</div><div class="val" style="color:var(--mexico)">${fmtN2(perdMes.mexico?.total||0)}</div>
+        <div class="sub">${perdMes.total>0?Math.round((perdMes.mexico?.total||0)/perdMes.total*100):0}% do total</div></div>
+    </div>
+    <div class="charts-1">
+      <div class="ccard"><div class="ccard-ttl">Volume de Perdidos · últimos 5 meses</div>
+        <div class="cwrap md"><canvas id="fech-perd-mes"></canvas></div></div>
+    </div>
+    <div class="side-row">
+      <div>
+        <div class="sec-lbl2">Top Motivos · Chile <span class="pais-chip chip-chile" style="font-size:.65rem">CL</span><span></span></div>
+        <div class="twrap">${motivosTable('chile')}</div>
+      </div>
+      <div>
+        <div class="sec-lbl2">Top Motivos · México <span class="pais-chip chip-mexico" style="font-size:.65rem">MX</span><span></span></div>
+        <div class="twrap">${motivosTable('mexico')}</div>
+      </div>
+    </div>
+
+    <!-- ANÁLISES -->
+    <div class="sec-block">
+      <div class="sec-eyebrow">Análise de Perfil Financeiro · ${fmtMesLabel(mes)}</div>
+      <div class="sec-title">Top Motivos × Faixa de Renda</div>
+      <div class="sec-divider div-perda"></div>
+    </div>
+    <div id="fech-analises-renda" class="twrap" style="margin-bottom:16px"></div>
+
+    <div class="pfooter">
+      <span>Board Academy · LATAM · Fechamento ${fmtMesLabel(mes)}</span>
+      <span>Gerado em ${new Date().toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</span>
+    </div>`;
+}
+
+function renderGraficosFechamento(meses5,hist,ticketMedioPorMes){
+  const mes=FECH_MES;
+  const labels=meses5.map(m=>fmtMesLabel(m));
+
+  // Cores: destaque no mês de fechamento
+  const colBar=(ym)=>ym===mes?'#1a6b8a':'#1a6b8a28';
+  const borderBar=(ym)=>ym===mes?'#1a6b8a':'#1a6b8a88';
+
+  // Gráfico criados
+  dk('fech-cri-mes');
+  const ctxC=document.getElementById('fech-cri-mes');
+  if(ctxC){
+    charts['fech-cri-mes']=new Chart(ctxC,{type:'bar',
+      data:{labels,datasets:[
+        {label:'Chile',data:meses5.map(ym=>hist.criados.chile[ym]||0),backgroundColor:meses5.map(ym=>ym===mes?'#c0392b99':'#c0392b33'),borderColor:meses5.map(ym=>ym===mes?'#c0392b':'#c0392b88'),borderWidth:1.5,borderRadius:4},
+        {label:'México',data:meses5.map(ym=>hist.criados.mexico[ym]||0),backgroundColor:meses5.map(ym=>ym===mes?'#1a6b3c99':'#1a6b3c33'),borderColor:meses5.map(ym=>ym===mes?'#1a6b3c':'#1a6b3c88'),borderWidth:1.5,borderRadius:4},
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},
+        plugins:{legend:{display:true,position:'bottom',labels:{font:{size:9},padding:10,boxWidth:9}},
+          datalabels:{display:false},tooltip:{mode:'index',intersect:false}},
+        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}},border:{color:'transparent'}},
+          y:{stacked:true,grid:{color:GC},ticks:{font:{size:9},maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
+  }
+
+  // Gráfico receita
+  dk('fech-gan-receita');
+  const ctxR=document.getElementById('fech-gan-receita');
+  if(ctxR){
+    const vals=meses5.map(ym=>hist.ganhos[ym]?.r||0);
+    charts['fech-gan-receita']=new Chart(ctxR,{type:'bar',
+      data:{labels,datasets:[{data:vals,backgroundColor:meses5.map(ym=>ym===mes?'#4a7c6a99':'#4a7c6a33'),borderColor:meses5.map(ym=>ym===mes?'#4a7c6a':'#4a7c6a88'),borderWidth:1.5,borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},
+        plugins:{legend:{display:false},
+          datalabels:{display:true,formatter:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+Math.round(v),color:'#1c2b3a',font:{family:'DM Sans',size:9,weight:'700'},anchor:'end',align:'top',offset:2},
+          tooltip:{callbacks:{label:c=>c.parsed.y.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0})}}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:10}},border:{color:'transparent'}},
+          y:{grid:{color:GC},ticks:{font:{size:9},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v,maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
+  }
+
+  // Gráfico ticket médio
+  dk('fech-gan-ticket');
+  const ctxT=document.getElementById('fech-gan-ticket');
+  if(ctxT){
+    const vals=meses5.map(ym=>Math.round(ticketMedioPorMes[ym]||0));
+    charts['fech-gan-ticket']=new Chart(ctxT,{type:'bar',
+      data:{labels,datasets:[{data:vals,backgroundColor:meses5.map(ym=>ym===mes?'#b8873f99':'#b8873f33'),borderColor:meses5.map(ym=>ym===mes?'#b8873f':'#b8873f88'),borderWidth:1.5,borderRadius:4}]},
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},
+        plugins:{legend:{display:false},
+          datalabels:{display:c=>c.dataset.data[c.dataIndex]>0,formatter:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v,color:'#1c2b3a',font:{family:'DM Sans',size:9,weight:'700'},anchor:'end',align:'top',offset:2}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:10}},border:{color:'transparent'}},
+          y:{grid:{color:GC},ticks:{font:{size:9},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v,maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
+  }
+
+  // Gráfico perdidos
+  dk('fech-perd-mes');
+  const ctxP=document.getElementById('fech-perd-mes');
+  if(ctxP){
+    charts['fech-perd-mes']=new Chart(ctxP,{type:'bar',
+      data:{labels,datasets:[
+        {label:'Chile',data:meses5.map(ym=>hist.perdidos[ym]?.chile?.total||0),backgroundColor:meses5.map(ym=>ym===mes?'#c0392b99':'#c0392b33'),borderColor:meses5.map(ym=>ym===mes?'#c0392b':'#c0392b88'),borderWidth:1.5,borderRadius:4},
+        {label:'México',data:meses5.map(ym=>hist.perdidos[ym]?.mexico?.total||0),backgroundColor:meses5.map(ym=>ym===mes?'#1a6b3c99':'#1a6b3c33'),borderColor:meses5.map(ym=>ym===mes?'#1a6b3c':'#1a6b3c88'),borderWidth:1.5,borderRadius:4},
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},
+        plugins:{legend:{display:true,position:'bottom',labels:{font:{size:9},padding:10,boxWidth:9}},
+          datalabels:{display:false},tooltip:{mode:'index',intersect:false}},
+        scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}},border:{color:'transparent'}},
+          y:{stacked:true,grid:{color:GC},ticks:{font:{size:9},maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
+  }
+
+  // Análises: motivo × renda do mês de fechamento
+  const fechAnalises=document.getElementById('fech-analises-renda');
+  if(fechAnalises&&DATA.analises){
+    const ax=DATA.analises;
+    const top10=ax.top10Motivos||[];
+    const faixas=(ax.faixasDisp||[]).filter(f=>top10.some(m=>(ax.motivoRenda[m]?.[f]||0)>0));
+    const maxPF={};
+    faixas.forEach(f=>{maxPF[f]=Math.max(...top10.map(m=>ax.motivoRenda[m]?.[f]||0),1);});
+    fechAnalises.innerHTML=`<div style="overflow-x:auto"><table style="font-size:.75rem">
+      <thead><tr>
+        <th style="text-align:left;min-width:160px">Motivo</th>
+        ${faixas.map(f=>`<th style="text-align:center;font-size:.6rem;white-space:nowrap">${esc(f)}</th>`).join('')}
+        <th style="text-align:center">Total</th>
+      </tr></thead>
+      <tbody>${top10.map(motivo=>{
+        const totalR=faixas.reduce((s,f)=>s+(ax.motivoRenda[motivo]?.[f]||0),0);
+        return`<tr>
+          <td style="font-weight:500;color:var(--navy);padding:8px 14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${esc(motivo.length>30?motivo.slice(0,28)+'…':motivo)}</td>
+          ${faixas.map(f=>{const v=ax.motivoRenda[motivo]?.[f]||0;const bg=heatmapColor(v,maxPF[f]);return`<td style="text-align:center;padding:7px 10px;background:${bg};font-weight:${v>0?'700':'400'};color:${v>0?'var(--navy)':'var(--border)'}">${v||'·'}</td>`;}).join('')}
+          <td style="text-align:center;font-weight:700;color:var(--navy)">${totalR}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>`;
+  }
 }
 
 /* ── Análises ───────────────────────────────────────────────── */
@@ -1083,14 +1399,17 @@ function limparClassificacao(){
 /* ── Tabs ──────────────────────────────────────────────────── */
 function switchTab(tab){
   CURTAB=tab;
-  document.getElementById('tab-dash').style.display=tab==='dash'?'block':'none';
-  document.getElementById('tab-class').style.display=tab==='class'?'block':'none';
-  document.getElementById('tab-analises').style.display=tab==='analises'?'block':'none';
+  ['dash','fechamento','class','analises'].forEach(t=>{
+    const el=document.getElementById('tab-'+t);
+    if(el)el.style.display=t===tab?'block':'none';
+  });
   document.getElementById('btn-tab-dash').className='tab-btn'+(tab==='dash'?' active':'');
+  document.getElementById('btn-tab-fechamento').className='tab-btn'+(tab==='fechamento'?' active':'');
   document.getElementById('btn-tab-class').className='tab-btn'+(tab==='class'?' active-class':'');
   document.getElementById('btn-tab-analises').className='tab-btn'+(tab==='analises'?' active':'');
   if(tab==='class')renderClassificacao();
   if(tab==='analises')renderAnalises();
+  if(tab==='fechamento')renderFechamento();
 }
 
 /* ── Snapshot / Comparação ───────────────────────────────── */
