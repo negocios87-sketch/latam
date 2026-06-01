@@ -317,12 +317,12 @@ app.get('/api/report', async(req,res)=>{
     const faixas=buildFaixas(regrasScore);
 
     const C={
-      total:0,porDia:{},porSemana:{},
-      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
-      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
+      total:0,porDia:{},porSemana:{},porMes:{},
+      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{},porMes:{}},
+      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{},porMes:{}},
       referidos:{total:0,a:0,g:0,p:0},
     };
-    const G={deals:[],porDia:{},porSemana:{},origemTemporal:{},vendsPorProprietario:{}};
+    const G={deals:[],porDia:{},porSemana:{},porMes:{},origemTemporal:{},vendsPorProprietario:{}};
     const P={
       total:0,porDia:{},porSemana:{},origemTemporal:{},deals:[],
       chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
@@ -365,6 +365,11 @@ app.get('/api/report', async(req,res)=>{
         C.porSemana[addW]=(C.porSemana[addW]||0)+1;
         pc.porSemana[addW]=(pc.porSemana[addW]||0)+1;
       }
+      // Histórico mensal de criados (todos os meses)
+      if(addYM){
+        C.porMes[addYM]=(C.porMes[addYM]||0)+1;
+        pc.porMes[addYM]=(pc.porMes[addYM]||0)+1;
+      }
 
       // ── GANHOS ────────────────────────────────────────────
       if(deal.status==='won'&&deal.won_time){
@@ -391,6 +396,13 @@ app.get('/api/report', async(req,res)=>{
           if(!G.porDia[wonD])G.porDia[wonD]={t:0,r:0};
           G.porDia[wonD].t++;G.porDia[wonD].r+=val;
           G.origemTemporal[tempCat]=(G.origemTemporal[tempCat]||0)+1;
+          // Histórico mensal de ganhos (todos os meses)
+          const wonYMall=toYM(deal.won_time);
+          if(wonYMall){
+            if(!G.porMes[wonYMall])G.porMes[wonYMall]={t:0,r:0,deals:[]};
+            G.porMes[wonYMall].t++;G.porMes[wonYMall].r+=val;
+            G.porMes[wonYMall].deals.push({id:deal.id,valor:val,proprietario,pais,dataGanho:wonD,addTime:toYMD(deal.add_time),titulo:deal.title||'—'});
+          }
         }
         if(wonW&&wSet.has(wonW)){
           if(!G.porSemana[wonW])G.porSemana[wonW]={t:0,r:0};
@@ -409,6 +421,16 @@ app.get('/api/report', async(req,res)=>{
           P.total++;pp.total++;
           P.porDia[lostD]=(P.porDia[lostD]||0)+1;
           pp.motivos[motivo]=(pp.motivos[motivo]||0)+1;
+          // Histórico mensal de perdidos por país e motivo
+          const lostYMall2=toYM(deal.lost_time);
+          if(lostYMall2){
+            const ppKey=pais==='CHILE'?'chile':'mexico';
+            if(!P.porMes)P.porMes={};
+            if(!P.porMes[lostYMall2])P.porMes[lostYMall2]={total:0,chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
+            P.porMes[lostYMall2].total++;
+            P.porMes[lostYMall2][ppKey].total++;
+            P.porMes[lostYMall2][ppKey].motivos[motivo]=(P.porMes[lostYMall2][ppKey].motivos[motivo]||0)+1;
+          }
           P.deals.push({
             id:deal.id,
             addTime:toYMD(deal.add_time),
@@ -522,6 +544,22 @@ app.get('/api/report', async(req,res)=>{
               pctMTD:metaMTD>0&&m.meta>0?+((m.receita/(m.meta*(duMTD/duMes||1)))*100).toFixed(1):0,
             })),
         },
+      },
+      historico:{
+        meses:[...new Set([
+          ...Object.keys(C.porMes),
+          ...Object.keys(G.porMes),
+          ...Object.keys(P.porMes||{}),
+        ])].sort(),
+        criados:{
+          total:C.porMes,
+          chile:C.chile.porMes,
+          mexico:C.mexico.porMes,
+        },
+        ganhos:Object.fromEntries(
+          Object.entries(G.porMes).map(([ym,v])=>([ym,{t:v.t,r:v.r,deals:v.deals}]))
+        ),
+        perdidos:P.porMes||{},
       },
       analises:{
         top10Motivos,
