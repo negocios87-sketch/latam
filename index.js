@@ -21,15 +21,29 @@ const METAS_URL          = process.env.METAS_URL
 const FERIADOS_URL       = process.env.FERIADOS_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv';
 
-// ── Cache em memória (TTL 5 min) ─────────────────────────────
+// ── Cache em memória ─────────────────────────────────────────
 const _cache={};
-async function cachedFetch(url,ttlMs=5*60*1000){
+async function cachedFetch(url,ttlMs=10*60*1000){
   const now=Date.now();
   if(_cache[url]&&(now-_cache[url].ts)<ttlMs)return _cache[url].data;
   const r=await fetch(url,{cache:'no-store'});
   if(!r.ok)throw new Error(`HTTP ${r.status}`);
   const data=await r.text();
   _cache[url]={data,ts:now};
+  return data;
+}
+
+// Cache de deals do Pipedrive (TTL 5 min)
+const _dealsCache={};
+async function fetchByFilterCached(filterId,ttlMs=5*60*1000){
+  const now=Date.now();
+  if(_dealsCache[filterId]&&(now-_dealsCache[filterId].ts)<ttlMs){
+    console.log(`[cache] deals filtro ${filterId} — hit`);
+    return _dealsCache[filterId].data;
+  }
+  console.log(`[cache] deals filtro ${filterId} — miss, buscando...`);
+  const data=await fetchByFilter(filterId);
+  _dealsCache[filterId]={data,ts:now};
   return data;
 }
 
@@ -298,7 +312,7 @@ app.get('/api/report', async(req,res)=>{
 
     console.log('[report] curYM:', curYM);
     const[allDeals,regrasScore,feriados,metasData]=await Promise.all([
-      fetchByFilter(FILTER_LATAM).catch(e=>{console.error('fetchByFilter:',e.message);throw e;}),
+      fetchByFilterCached(FILTER_LATAM).catch(e=>{console.error('fetchByFilter:',e.message);throw e;}),
       carregarRegrasScore().catch(e=>{console.error('regrasScore:',e.message);return[];}),
       carregarFeriados().catch(e=>{console.error('feriados:',e.message);return new Set();}),
       carregarMetasLatam(curYM).catch(e=>{console.error('metas:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}),
@@ -614,20 +628,6 @@ app.get('/api/debug-renda', async(req,res)=>{
       });
     const semMatch=Object.values(freq).reduce((s,v)=>s+v,0);
     const comMatch=resultado.filter(r=>r.match!=='❌ SEM MATCH').reduce((s,r)=>s+r.count,0);
-    // Serializa análises cruzadas
-    // Top 10 motivos globais
-    const motivoTotais={};
-    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
-      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
-    });
-    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
-    // Meses disponíveis ordenados
-    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
-    // Faixas disponíveis (ordem da planilha)
-    // Deduplica faixas (Não informado pode vir das regras)
-    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
-    const faixasDisp=[...faixasSet];
-
     res.json({ok:true,mes:curYM,totalDealsNoMes:dealsDoMes.length,regrasLatam:regras.filter(r=>r.tipo==='renda'&&r.pais==='latam').length,comMatch,semMatch:semMatch-comMatch,resultado});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
@@ -652,20 +652,6 @@ app.get('/api/debug-metas', async(req,res)=>{
       else if(/\.\d{3}$/.test(v))v=v.replace(/\./g,'');
       return{nome:cols[3],col5raw:cols[5],vProcessado:v,resultado:parseFloat(v)||0};
     });
-    // Serializa análises cruzadas
-    // Top 10 motivos globais
-    const motivoTotais={};
-    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
-      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
-    });
-    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
-    // Meses disponíveis ordenados
-    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
-    // Faixas disponíveis (ordem da planilha)
-    // Deduplica faixas (Não informado pode vir das regras)
-    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
-    const faixasDisp=[...faixasSet];
-
     res.json({ok:true,totalLinhas2026maio:rows.length,rows});
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
