@@ -331,23 +331,18 @@ app.get('/api/report', async(req,res)=>{
     const faixas=buildFaixas(regrasScore);
 
     const C={
-      total:0,porDia:{},porSemana:{},porMes:{},
-      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{},porMes:{}},
-      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{},porMes:{}},
+      total:0,porDia:{},porSemana:{},
+      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
+      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
       referidos:{total:0,a:0,g:0,p:0},
     };
-    const G={deals:[],porDia:{},porSemana:{},porMes:{},origemTemporal:{},vendsPorProprietario:{}};
+    const G={deals:[],porDia:{},porSemana:{},origemTemporal:{},vendsPorProprietario:{}};
     const P={
       total:0,porDia:{},porSemana:{},origemTemporal:{},deals:[],
       chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
       mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
     };
-    // Análises cruzadas (todos os meses disponíveis)
-    const AX={
-      motivoMes:{},   // {motivo: {YYYY-MM: count}}
-      motivoRenda:{}, // {motivo: {legenda: count}}
-      mesRenda:{},    // {YYYY-MM addTime: {legenda: count}} para perdidos
-    };
+
 
     for(const deal of allDeals){
       const pais=getPais(deal);
@@ -379,11 +374,7 @@ app.get('/api/report', async(req,res)=>{
         C.porSemana[addW]=(C.porSemana[addW]||0)+1;
         pc.porSemana[addW]=(pc.porSemana[addW]||0)+1;
       }
-      // Histórico mensal de criados (todos os meses)
-      if(addYM){
-        C.porMes[addYM]=(C.porMes[addYM]||0)+1;
-        pc.porMes[addYM]=(pc.porMes[addYM]||0)+1;
-      }
+
 
       // ── GANHOS ────────────────────────────────────────────
       if(deal.status==='won'&&deal.won_time){
@@ -410,13 +401,7 @@ app.get('/api/report', async(req,res)=>{
           if(!G.porDia[wonD])G.porDia[wonD]={t:0,r:0};
           G.porDia[wonD].t++;G.porDia[wonD].r+=val;
           G.origemTemporal[tempCat]=(G.origemTemporal[tempCat]||0)+1;
-          // Histórico mensal de ganhos (todos os meses)
-          const wonYMall=toYM(deal.won_time);
-          if(wonYMall){
-            if(!G.porMes[wonYMall])G.porMes[wonYMall]={t:0,r:0,deals:[]};
-            G.porMes[wonYMall].t++;G.porMes[wonYMall].r+=val;
-            G.porMes[wonYMall].deals.push({id:deal.id,valor:val,proprietario,pais,dataGanho:wonD,addTime:toYMD(deal.add_time),titulo:deal.title||'—'});
-          }
+
         }
         if(wonW&&wSet.has(wonW)){
           if(!G.porSemana[wonW])G.porSemana[wonW]={t:0,r:0};
@@ -435,16 +420,7 @@ app.get('/api/report', async(req,res)=>{
           P.total++;pp.total++;
           P.porDia[lostD]=(P.porDia[lostD]||0)+1;
           pp.motivos[motivo]=(pp.motivos[motivo]||0)+1;
-          // Histórico mensal de perdidos por país e motivo
-          const lostYMall2=toYM(deal.lost_time);
-          if(lostYMall2){
-            const ppKey=pais==='CHILE'?'chile':'mexico';
-            if(!P.porMes)P.porMes={};
-            if(!P.porMes[lostYMall2])P.porMes[lostYMall2]={total:0,chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
-            P.porMes[lostYMall2].total++;
-            P.porMes[lostYMall2][ppKey].total++;
-            P.porMes[lostYMall2][ppKey].motivos[motivo]=(P.porMes[lostYMall2][ppKey].motivos[motivo]||0)+1;
-          }
+
           P.deals.push({
             id:deal.id,
             addTime:toYMD(deal.add_time),
@@ -463,24 +439,7 @@ app.get('/api/report', async(req,res)=>{
         }
         if(lostW&&wSet.has(lostW))P.porSemana[lostW]=(P.porSemana[lostW]||0)+1;
       }
-      // Análises cruzadas — todos os perdidos (independente do mês selecionado)
-      if(deal.status==='lost'&&deal.lost_time){
-        const motivo=deal.lost_reason?.trim()||'Não informado';
-        const lostYMall=toYM(deal.lost_time);
-        const addYMall=toYM(deal.add_time);
-        if(lostYMall){
-          if(!AX.motivoMes[motivo])AX.motivoMes[motivo]={};
-          AX.motivoMes[motivo][lostYMall]=(AX.motivoMes[motivo][lostYMall]||0)+1;
-        }
-        const rendaLeg=getRendaLegenda(deal,regrasScore);
-        if(!AX.motivoRenda[motivo])AX.motivoRenda[motivo]={};
-        AX.motivoRenda[motivo][rendaLeg]=(AX.motivoRenda[motivo][rendaLeg]||0)+1;
-        // Mês de criação × Renda (para perdidos)
-        if(addYMall){
-          if(!AX.mesRenda[addYMall])AX.mesRenda[addYMall]={};
-          AX.mesRenda[addYMall][rendaLeg]=(AX.mesRenda[addYMall][rendaLeg]||0)+1;
-        }
-      }
+
     }
 
     // ── Dias úteis MTD ────────────────────────────────────────
@@ -509,20 +468,6 @@ app.get('/api/report', async(req,res)=>{
       {label:ymLabel(prev2YM),               v:ot.prev2||0,pct:total>0?Math.round((ot.prev2||0)/total*100):0},
       {label:`Antes de ${ymLabel(prev2YM)}`, v:ot.antes||0,pct:total>0?Math.round((ot.antes||0)/total*100):0},
     ];
-
-    // Serializa análises cruzadas
-    // Top 10 motivos globais
-    const motivoTotais={};
-    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
-      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
-    });
-    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
-    // Meses disponíveis ordenados
-    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
-    // Faixas disponíveis (ordem da planilha)
-    // Deduplica faixas (Não informado pode vir das regras)
-    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
-    const faixasDisp=[...faixasSet];
 
     res.json({
       ok:true,mes:curYM,updatedAt:new Date().toISOString(),
@@ -559,15 +504,7 @@ app.get('/api/report', async(req,res)=>{
             })),
         },
       },
-      analises:{
-        top10Motivos,
-        mesesDisp,
-        faixasDisp,
-        motivoMes:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoMes[m]||{}])),
-        motivoRenda:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoRenda[m]||{}])),
-        mesRenda:AX.mesRenda,
-        mesesCriacao:[...new Set(Object.keys(AX.mesRenda))].sort(),
-      },
+
       perdidos:{
         total:P.total,
         deals:P.deals||[],
