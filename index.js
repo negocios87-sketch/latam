@@ -559,22 +559,6 @@ app.get('/api/report', async(req,res)=>{
             })),
         },
       },
-      historico:{
-        meses:[...new Set([
-          ...Object.keys(C.porMes),
-          ...Object.keys(G.porMes),
-          ...Object.keys(P.porMes||{}),
-        ])].sort(),
-        criados:{
-          total:C.porMes,
-          chile:C.chile.porMes,
-          mexico:C.mexico.porMes,
-        },
-        ganhos:Object.fromEntries(
-          Object.entries(G.porMes).map(([ym,v])=>([ym,{t:v.t,r:v.r,deals:v.deals}]))
-        ),
-        perdidos:P.porMes||{},
-      },
       analises:{
         top10Motivos,
         mesesDisp,
@@ -601,6 +585,110 @@ app.get('/api/report', async(req,res)=>{
   }
 });
 
+
+// ── Histórico (endpoint separado, lazy) ──────────────────────
+app.get('/api/historico', async(req,res)=>{
+  if(!API_TOKEN)return res.status(500).json({ok:false,error:'sem token'});
+  try{
+    const[allDeals,regrasScore]=await Promise.all([
+      fetchByFilterCached(FILTER_LATAM),
+      carregarRegrasScore(),
+    ]);
+
+    const faixas=buildFaixas(regrasScore);
+    const C_mes={},C_chile={},C_mexico={};
+    const G_mes={};
+    const P_mes={};
+    const AX={motivoMes:{},motivoRenda:{},mesRenda:{}};
+
+    for(const deal of allDeals){
+      const pais=getPais(deal);
+      const addYM=toYM(deal.add_time);
+      const pc_mes=pais==='CHILE'?C_chile:C_mexico;
+
+      // Criados por mês
+      if(addYM){
+        C_mes[addYM]=(C_mes[addYM]||0)+1;
+        pc_mes[addYM]=(pc_mes[addYM]||0)+1;
+      }
+
+      // Ganhos por mês
+      if(deal.status==='won'&&deal.won_time){
+        const wonYM=toYM(deal.won_time);
+        const val=parseFloat(deal.value||0);
+        const proprietario=deal.owner_name||(deal.user_id&&deal.user_id.name)||'—';
+        if(wonYM&&val>0){
+          if(!G_mes[wonYM])G_mes[wonYM]={t:0,r:0,deals:[]};
+          G_mes[wonYM].t++;G_mes[wonYM].r+=val;
+          G_mes[wonYM].deals.push({
+            id:deal.id,valor:val,proprietario,pais,
+            dataGanho:toYMD(deal.won_time),
+            addTime:toYMD(deal.add_time),
+            titulo:deal.title||'—',
+          });
+        }
+      }
+
+      // Perdidos por mês
+      if(deal.status==='lost'&&deal.lost_time){
+        const lostYM=toYM(deal.lost_time);
+        const motivo=deal.lost_reason?.trim()||'Não informado';
+        const rendaLeg=getRendaLegenda(deal,regrasScore);
+        const ppKey=pais==='CHILE'?'chile':'mexico';
+
+        if(lostYM){
+          if(!P_mes[lostYM])P_mes[lostYM]={total:0,chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
+          P_mes[lostYM].total++;
+          P_mes[lostYM][ppKey].total++;
+          P_mes[lostYM][ppKey].motivos[motivo]=(P_mes[lostYM][ppKey].motivos[motivo]||0)+1;
+        }
+
+        // AX
+        if(lostYM){
+          if(!AX.motivoMes[motivo])AX.motivoMes[motivo]={};
+          AX.motivoMes[motivo][lostYM]=(AX.motivoMes[motivo][lostYM]||0)+1;
+        }
+        if(!AX.motivoRenda[motivo])AX.motivoRenda[motivo]={};
+        AX.motivoRenda[motivo][rendaLeg]=(AX.motivoRenda[motivo][rendaLeg]||0)+1;
+        if(addYM){
+          if(!AX.mesRenda[addYM])AX.mesRenda[addYM]={};
+          AX.mesRenda[addYM][rendaLeg]=(AX.mesRenda[addYM][rendaLeg]||0)+1;
+        }
+      }
+    }
+
+    // Serializa análises
+    const motivoTotais={};
+    Object.entries(AX.motivoMes).forEach(([m,meses])=>{
+      motivoTotais[m]=Object.values(meses).reduce((s,v)=>s+v,0);
+    });
+    const top10Motivos=Object.entries(motivoTotais).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m])=>m);
+    const mesesDisp=[...new Set(Object.values(AX.motivoMes).flatMap(m=>Object.keys(m)))].sort();
+    const faixasSet=new Set([...faixas.map(f=>f.legenda),'Não informado']);
+    const faixasDisp=[...faixasSet];
+    const meses=[...new Set([...Object.keys(C_mes),...Object.keys(G_mes),...Object.keys(P_mes)])].sort();
+
+    res.json({
+      ok:true,
+      historico:{
+        meses,
+        criados:{total:C_mes,chile:C_chile,mexico:C_mexico},
+        ganhos:G_mes,
+        perdidos:P_mes,
+      },
+      analises:{
+        top10Motivos,mesesDisp,faixasDisp,
+        motivoMes:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoMes[m]||{}])),
+        motivoRenda:Object.fromEntries(top10Motivos.map(m=>[m,AX.motivoRenda[m]||{}])),
+        mesRenda:AX.mesRenda,
+        mesesCriacao:[...new Set(Object.keys(AX.mesRenda))].sort(),
+      },
+    });
+  }catch(e){
+    console.error('[/api/historico]',e);
+    res.status(500).json({ok:false,error:e.message});
+  }
+});
 
 // ── DEBUG: ver valores reais do campo renda (mês atual) ──────
 app.get('/api/debug-renda', async(req,res)=>{
