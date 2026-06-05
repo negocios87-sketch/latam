@@ -305,13 +305,9 @@ async function fetchByFilter(filterId){
 app.get('/api/report', async(req,res)=>{
   if(!API_TOKEN)return res.status(500).json({ok:false,error:'PIPEDRIVE_TOKEN não configurado.'});
   try{
-    const now=new Date();
-    // Padrão: mês anterior (mais completo)
-    const _curDate=new Date(now.getFullYear(),now.getMonth()-1,1);
-    const _defaultYM=`${_curDate.getFullYear()}-${String(_curDate.getMonth()+1).padStart(2,'0')}`;
     const curYM=req.query.mes&&/^\d{4}-\d{2}$/.test(req.query.mes)
       ?req.query.mes
-      :_defaultYM;
+      :'2026-05';
 
     console.log('[report] curYM:', curYM);
     const[allDeals,regrasScore,feriados,metasData]=await Promise.all([
