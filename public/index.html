@@ -1101,16 +1101,7 @@ function computeGanhosStats(enriched){
     const ai=ORDER.indexOf(a[0]),bi=ORDER.indexOf(b[0]);
     return(ai<0?99:ai)-(bi<0?99:bi);
   }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,revReal:x.revReal,ticketReal:x.t?(x.revReal/x.t):0,deals:x.deals}));
-  // Lead Time de Ganho — só Normal e Primeira Parcela, ignora negativos
-  const dealsLT=enriched.filter(d=>d.origem==='Normal'||d.origem==='Primeira Parcela');
-  const ltVals=dealsLT.map(d=>{
-    if(!d.addTime||!d.dataGanho)return null;
-    const diff=Math.round((new Date(d.dataGanho)-new Date(d.addTime))/(1000*60*60*24));
-    return diff>=0?diff:null;
-  }).filter(v=>v!==null);
-  const leadTimeGanho=ltVals.length?+(ltVals.reduce((s,v)=>s+v,0)/ltVals.length).toFixed(1):null;
-
-  return{total,receita,ticket,somaTickets,leadTimeGanho,leadTimeN:ltVals.length,
+  return{total,receita,ticket,somaTickets,
     chile:{total:chile.length,receita:chile.reduce((s,d)=>s+d.valor,0)},
     mexico:{total:mexico.length,receita:mexico.reduce((s,d)=>s+d.valor,0)},
     porOrigem};
@@ -1279,14 +1270,6 @@ function render(){
     </div>
 
     ${metasHtml(ganhos.metas)}
-
-    <div class="kpi-row kpi1" style="margin-bottom:16px">
-      <div class="kpi"><div class="kpi-accent" style="background:var(--latam)"></div>
-        <div class="lbl">Lead Time de Ganho · Normal + Primeira Parcela</div>
-        <div class="val" style="font-size:1.4rem">${gStats.leadTimeGanho!==null?gStats.leadTimeGanho+' dias':'—'}</div>
-        <div class="sub">média · ${gStats.leadTimeN||0} deals considerados · data ganho − data criação</div>
-      </div>
-    </div>
 
     <div class="charts-1">
       <div class="ccard"><div class="ccard-ttl">Vendas por dia · mês atual</div><div class="cwrap"><canvas id="ch-gan-dia"></canvas></div></div>
