@@ -12,6 +12,7 @@ const FILTER_LATAM    = process.env.FILTER_LATAM    || '1654189';
 const PRODUCT_FIELD      = '8bdce76ba66f0fed0280918a4845190c92899ed5';
 const REFERIDO_FIELD     = '54fc9258843cdf7ea126b6c5aca9d4dc93a3a718';
 const FIELD_RENDA        = 'c95b2c453828853409c0a1f5d5f1a6ab30eebebf';
+const FIELD_CARGO        = '718c8aba81211c883ffd9f4616f75ee22a10b2da';
 const SCORE_RULES_URL    = process.env.SCORE_RULES_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=422517996&single=true&output=csv';
 const COLABORADORES_URL  = process.env.COLABORADORES_URL
@@ -210,6 +211,31 @@ async function carregarMetasLatam(curYM){
   }catch(e){console.warn('Metas failed:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}
 }
 
+// Retorna legenda de cargo (sem filtro de país)
+function getCargoLegenda(deal,regras){
+  const textoNorm=normalizarTexto(deal[FIELD_CARGO]);
+  if(!textoNorm)return'Não informado';
+  const match=regras.find(r=>
+    r.tipo==='cargo'&&
+    r.contemNorm&&
+    textoNorm.includes(r.contemNorm)
+  );
+  return match?(match.legenda||match.contem):'Não informado';
+}
+
+// Monta faixas de cargo das regras
+function buildFaixasCargo(regras){
+  const seen=new Map();
+  regras
+    .filter(r=>r.tipo==='cargo'&&r.legenda)
+    .forEach(r=>{if(!seen.has(r.legenda))seen.set(r.legenda,r.pontuacao);});
+  const faixas=[...seen.entries()]
+    .sort((a,b)=>a[1]-b[1])
+    .map(([legenda,pontuacao])=>({legenda,pontuacao}));
+  faixas.push({legenda:'Não informado',pontuacao:-1});
+  return faixas;
+}
+
 // Retorna legenda da faixa de renda do deal (filtra LATAM)
 function getRendaLegenda(deal,regras){
   const textoNorm=normalizarTexto(deal[FIELD_RENDA]);
@@ -331,17 +357,19 @@ app.get('/api/report', async(req,res)=>{
 
     const faixas=buildFaixas(regrasScore);
 
+    const faixasCargo=buildFaixasCargo(regrasScore);
+
     const C={
       total:0,porDia:{},porSemana:{},
-      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
-      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),porDia:{},porSemana:{}},
+      chile:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),cargoFaixas:emptyFaixas(faixasCargo),porDia:{},porSemana:{}},
+      mexico:{total:0,st:{a:0,g:0,p:0},scoreFaixas:emptyFaixas(faixas),cargoFaixas:emptyFaixas(faixasCargo),porDia:{},porSemana:{}},
       referidos:{total:0,a:0,g:0,p:0},
     };
     const G={deals:[],porDia:{},porSemana:{},origemTemporal:{},vendsPorProprietario:{}};
     const P={
       total:0,porDia:{},porSemana:{},origemTemporal:{},deals:[],
-      chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
-      mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas)},
+      chile:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas),cargoFaixas:emptyFaixas(faixasCargo)},
+      mexico:{total:0,motivos:{},scoreFaixas:emptyFaixas(faixas),cargoFaixas:emptyFaixas(faixasCargo)},
     };
 
 
@@ -364,6 +392,9 @@ app.get('/api/report', async(req,res)=>{
         const legenda=getRendaLegenda(deal,regrasScore);
         if(pc.scoreFaixas[legenda]!==undefined)pc.scoreFaixas[legenda]++;
         else pc.scoreFaixas['Não informado']=(pc.scoreFaixas['Não informado']||0)+1;
+        const legendaCargo=getCargoLegenda(deal,regrasScore);
+        if(pc.cargoFaixas[legendaCargo]!==undefined)pc.cargoFaixas[legendaCargo]++;
+        else pc.cargoFaixas['Não informado']=(pc.cargoFaixas['Não informado']||0)+1;
         if(ref){
           C.referidos.total++;
           if(deal.status==='open')C.referidos.a++;
@@ -432,6 +463,9 @@ app.get('/api/report', async(req,res)=>{
           const legenda=getRendaLegenda(deal,regrasScore);
           if(pp.scoreFaixas[legenda]!==undefined)pp.scoreFaixas[legenda]++;
           else pp.scoreFaixas['Não informado']=(pp.scoreFaixas['Não informado']||0)+1;
+          const legendaCargo=getCargoLegenda(deal,regrasScore);
+          if(pp.cargoFaixas[legendaCargo]!==undefined)pp.cargoFaixas[legendaCargo]++;
+          else pp.cargoFaixas['Não informado']=(pp.cargoFaixas['Não informado']||0)+1;
           let tempCat='antes';
           if(addYM===curYM)tempCat='cur';
           else if(addYM===prevYM)tempCat='prev';
@@ -459,6 +493,10 @@ app.get('/api/report', async(req,res)=>{
     // ── Serialização ──────────────────────────────────────────
     const MES_NOMES=['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     const ymLabel=ym=>{const[y,m]=ym.split('-');return MES_NOMES[+m-1]+'/'+y.slice(2);};
+    const serFaixasCargo=(sf,total)=>faixasCargo.map(f=>{
+      const v=sf[f.legenda]||0;
+      return{label:f.legenda,v,pct:total>0?+((v/total)*100).toFixed(1):0};
+    });
     const serFaixas=(sf,total)=>faixas.map(f=>{
       const v=sf[f.legenda]||0;
       return{label:f.legenda,v,pct:total>0?+((v/total)*100).toFixed(1):0};
@@ -476,8 +514,8 @@ app.get('/api/report', async(req,res)=>{
       criados:{
         total:C.total,
         mediaDia:allDays.length?+(C.total/allDays.length).toFixed(1):0,
-        chile:{total:C.chile.total,status:C.chile.st,pct:C.total>0?Math.round(C.chile.total/C.total*100):0,scoreFaixas:serFaixas(C.chile.scoreFaixas,C.chile.total)},
-        mexico:{total:C.mexico.total,status:C.mexico.st,pct:C.total>0?Math.round(C.mexico.total/C.total*100):0,scoreFaixas:serFaixas(C.mexico.scoreFaixas,C.mexico.total)},
+        chile:{total:C.chile.total,status:C.chile.st,pct:C.total>0?Math.round(C.chile.total/C.total*100):0,scoreFaixas:serFaixas(C.chile.scoreFaixas,C.chile.total),cargoFaixas:serFaixasCargo(C.chile.cargoFaixas,C.chile.total)},
+        mexico:{total:C.mexico.total,status:C.mexico.st,pct:C.total>0?Math.round(C.mexico.total/C.total*100):0,scoreFaixas:serFaixas(C.mexico.scoreFaixas,C.mexico.total),cargoFaixas:serFaixasCargo(C.mexico.cargoFaixas,C.mexico.total)},
         referidos:C.referidos,
         porDia:allDays.map(d=>({d,v:C.porDia[d]||0,chile:C.chile.porDia[d]||0,mexico:C.mexico.porDia[d]||0})),
         porSemana:weeks.map(w=>({w,v:C.porSemana[w]||0,chile:C.chile.porSemana[w]||0,mexico:C.mexico.porSemana[w]||0})),
@@ -510,8 +548,8 @@ app.get('/api/report', async(req,res)=>{
         total:P.total,
         deals:P.deals||[],
         mediaDia:allDays.length?+(P.total/allDays.length).toFixed(1):0,
-        chile:{total:P.chile.total,pct:P.total>0?Math.round(P.chile.total/P.total*100):0,motivos:Object.entries(P.chile.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.chile.total?Math.round(c/P.chile.total*100):0})),scoreFaixas:serFaixas(P.chile.scoreFaixas,P.chile.total)},
-        mexico:{total:P.mexico.total,pct:P.total>0?Math.round(P.mexico.total/P.total*100):0,motivos:Object.entries(P.mexico.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.mexico.total?Math.round(c/P.mexico.total*100):0})),scoreFaixas:serFaixas(P.mexico.scoreFaixas,P.mexico.total)},
+        chile:{total:P.chile.total,pct:P.total>0?Math.round(P.chile.total/P.total*100):0,motivos:Object.entries(P.chile.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.chile.total?Math.round(c/P.chile.total*100):0})),scoreFaixas:serFaixas(P.chile.scoreFaixas,P.chile.total),cargoFaixas:serFaixasCargo(P.chile.cargoFaixas,P.chile.total)},
+        mexico:{total:P.mexico.total,pct:P.total>0?Math.round(P.mexico.total/P.total*100):0,motivos:Object.entries(P.mexico.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.mexico.total?Math.round(c/P.mexico.total*100):0})),scoreFaixas:serFaixas(P.mexico.scoreFaixas,P.mexico.total),cargoFaixas:serFaixasCargo(P.mexico.cargoFaixas,P.mexico.total)},
         porDia:allDays.map(d=>({d,v:P.porDia[d]||0})),
         porSemana:weeks.map(w=>({w,v:P.porSemana[w]||0})),
         origemTemporal:origTemporalSer(P.origemTemporal,P.total),
