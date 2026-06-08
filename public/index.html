@@ -322,6 +322,35 @@ function mkStackedBar(id,labels,datasets,opts={}){
         y:{stacked:true,grid:{color:GC},ticks:{font:{size:9},maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
 }
 
+function mkScoreBarH(id,items,col){
+  dk(id);const ctx=document.getElementById(id);if(!ctx)return;
+  const labels=(items||[]).map(x=>x.label);
+  const values=(items||[]).map(x=>x.pct||0);
+  const volumes=(items||[]).map(x=>x.v||0);
+  charts[id]=new Chart(ctx,{type:'bar',
+    data:{labels,datasets:[{data:values,backgroundColor:col+'33',borderColor:col,borderWidth:1.5,borderRadius:4}]},
+    options:{
+      indexAxis:'y',
+      responsive:true,maintainAspectRatio:false,
+      layout:{padding:{right:40,top:4}},
+      plugins:{
+        legend:{display:false},
+        datalabels:{
+          display:c=>c.dataset.data[c.dataIndex]>0,
+          formatter:v=>Number(v).toFixed(v%1?1:0)+'%',
+          color:col,font:{family:'DM Sans',size:9,weight:'700'},
+          anchor:'end',align:'right',offset:4,
+        },
+        tooltip:{callbacks:{label:c=>` ${Number(c.parsed.x).toFixed(1)}% · ${fmtN(volumes[c.dataIndex]||0)} leads`}},
+      },
+      scales:{
+        x:{display:false,beginAtZero:true,suggestedMax:50},
+        y:{grid:{display:false},ticks:{font:{size:9},color:'#8a8277'},border:{color:'transparent'}},
+      },
+    },
+  });
+}
+
 function mkScoreLine(id,items,col,snapItems){
   dk(id);const ctx=document.getElementById(id);if(!ctx)return;
   const labels=(items||[]).map(x=>x.label),values=(items||[]).map(x=>x.pct||0),volumes=(items||[]).map(x=>x.v||0);
@@ -1106,8 +1135,8 @@ function setScoreView(v){
   const snapSMx=SNAP&&SNAP.data?SNAP.data.criados?.mexico?.[v==='renda'?'scoreFaixas':'cargoFaixas']||[]:[];
   const dataChile=v==='renda'?cr.chile.scoreFaixas:cr.chile.cargoFaixas;
   const dataMexico=v==='renda'?cr.mexico.scoreFaixas:cr.mexico.cargoFaixas;
-  mkScoreLine('ch-score-chile',dataChile,'#c0392b',snapSCh.length?snapSCh:null);
-  mkScoreLine('ch-score-mexico',dataMexico,'#1a6b3c',snapSMx.length?snapSMx:null);
+  if(v==='cargo'){mkScoreBarH('ch-score-chile',dataChile,'#c0392b');mkScoreBarH('ch-score-mexico',dataMexico,'#1a6b3c');}
+  else{mkScoreLine('ch-score-chile',dataChile,'#c0392b',snapSCh.length?snapSCh:null);mkScoreLine('ch-score-mexico',dataMexico,'#1a6b3c',snapSMx.length?snapSMx:null);}
 }
 
 function setPScoreView(v){
@@ -1123,8 +1152,8 @@ function setPScoreView(v){
   const pe=DATA.perdidos;
   const dataChile=v==='renda'?pe.chile.scoreFaixas:pe.chile.cargoFaixas;
   const dataMexico=v==='renda'?pe.mexico.scoreFaixas:pe.mexico.cargoFaixas;
-  mkScoreLine('ch-perd-score-chile',dataChile,'#c0392b',null);
-  mkScoreLine('ch-perd-score-mexico',dataMexico,'#1a6b3c',null);
+  if(v==='cargo'){mkScoreBarH('ch-perd-score-chile',dataChile,'#c0392b');mkScoreBarH('ch-perd-score-mexico',dataMexico,'#1a6b3c');}
+  else{mkScoreLine('ch-perd-score-chile',dataChile,'#c0392b',null);mkScoreLine('ch-perd-score-mexico',dataMexico,'#1a6b3c',null);}
 }
 
 function render(){
@@ -1215,8 +1244,8 @@ function render(){
       <button id="score-tog-cargo" onclick="setScoreView('cargo')" style="background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Cargo</button>
     </div>
     <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl" id="score-ttl-chile">Faixa de Renda · <span class="fi fi-cl"></span> Chile</div><div class="cwrap md"><canvas id="ch-score-chile"></canvas></div></div>
-      <div class="ccard"><div class="ccard-ttl" id="score-ttl-mexico">Faixa de Renda · <span class="fi fi-mx"></span> México</div><div class="cwrap md"><canvas id="ch-score-mexico"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl" id="score-ttl-chile">Faixa de Renda · <span class="fi fi-cl"></span> Chile</div><div style="position:relative;height:220px"><canvas id="ch-score-chile"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl" id="score-ttl-mexico">Faixa de Renda · <span class="fi fi-mx"></span> México</div><div style="position:relative;height:220px"><canvas id="ch-score-mexico"></canvas></div></div>
     </div>
 
     ${insightHtml('criados')}
@@ -1292,8 +1321,8 @@ function render(){
       <button id="pscore-tog-cargo" onclick="setPScoreView('cargo')" style="background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Cargo</button>
     </div>
     <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-chile">Faixa de Renda (perdidos) · <span class="fi fi-cl"></span> Chile</div><div class="cwrap md"><canvas id="ch-perd-score-chile"></canvas></div></div>
-      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-mexico">Faixa de Renda (perdidos) · <span class="fi fi-mx"></span> México</div><div class="cwrap md"><canvas id="ch-perd-score-mexico"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-chile">Faixa de Renda (perdidos) · <span class="fi fi-cl"></span> Chile</div><div style="position:relative;height:220px"><canvas id="ch-perd-score-chile"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-mexico">Faixa de Renda (perdidos) · <span class="fi fi-mx"></span> México</div><div style="position:relative;height:220px"><canvas id="ch-perd-score-mexico"></canvas></div></div>
     </div>
     <div class="ot-card" style="margin-bottom:16px">
       <div class="ot-title">Quando foi criado o lead que foi perdido</div>
