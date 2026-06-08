@@ -1093,8 +1093,10 @@ let _pscoreView='renda';
 
 function setScoreView(v){
   _scoreView=v;
-  document.getElementById('score-tog-renda').className='gtog'+(v==='renda'?' active':'');
-  document.getElementById('score-tog-cargo').className='gtog'+(v==='cargo'?' active':'');
+  const _sActive='background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:\'DM Sans\',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s';
+  const _sInact='background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:\'DM Sans\',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s';
+  document.getElementById('score-tog-renda').style.cssText=v==='renda'?_sActive:_sInact;
+  document.getElementById('score-tog-cargo').style.cssText=v==='cargo'?_sActive:_sInact;
   const lbl=v==='renda'?'Faixa de Renda':'Cargo';
   document.getElementById('score-ttl-chile').innerHTML=`${lbl} · <span class="fi fi-cl"></span> Chile`;
   document.getElementById('score-ttl-mexico').innerHTML=`${lbl} · <span class="fi fi-mx"></span> México`;
@@ -1110,8 +1112,10 @@ function setScoreView(v){
 
 function setPScoreView(v){
   _pscoreView=v;
-  document.getElementById('pscore-tog-renda').className='gtog'+(v==='renda'?' active':'');
-  document.getElementById('pscore-tog-cargo').className='gtog'+(v==='cargo'?' active':'');
+  const _psActive='background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:\'DM Sans\',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s';
+  const _psInact='background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:\'DM Sans\',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s';
+  document.getElementById('pscore-tog-renda').style.cssText=v==='renda'?_psActive:_psInact;
+  document.getElementById('pscore-tog-cargo').style.cssText=v==='cargo'?_psActive:_psInact;
   const lbl=v==='renda'?'Faixa de Renda (perdidos)':'Cargo (perdidos)';
   document.getElementById('pscore-ttl-chile').innerHTML=`${lbl} · <span class="fi fi-cl"></span> Chile`;
   document.getElementById('pscore-ttl-mexico').innerHTML=`${lbl} · <span class="fi fi-mx"></span> México`;
@@ -1206,9 +1210,9 @@ function render(){
       <div class="ccard"><div class="ccard-ttl">Volume dia a dia · Chile vs México</div><div class="cwrap md"><canvas id="ch-cri-dia"></canvas></div></div>
       <div class="ccard"><div class="ccard-ttl">Volume por semana · últimas 8 semanas (Seg→Dom)</div><div class="cwrap md"><canvas id="ch-cri-sem"></canvas></div></div>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button class="gtog active" id="score-tog-renda" onclick="setScoreView('renda')">Faixa de Renda</button>
-      <button class="gtog" id="score-tog-cargo" onclick="setScoreView('cargo')">Cargo</button>
+    <div style="display:inline-flex;gap:3px;margin-bottom:12px;background:var(--border);border-radius:8px;padding:3px">
+      <button id="score-tog-renda" onclick="setScoreView('renda')" style="background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Renda</button>
+      <button id="score-tog-cargo" onclick="setScoreView('cargo')" style="background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Cargo</button>
     </div>
     <div class="charts-2">
       <div class="ccard"><div class="ccard-ttl" id="score-ttl-chile">Faixa de Renda · <span class="fi fi-cl"></span> Chile</div><div class="cwrap md"><canvas id="ch-score-chile"></canvas></div></div>
@@ -1283,9 +1287,9 @@ function render(){
       <div class="ccard"><div class="ccard-ttl">Top motivos · <span class="fi fi-mx"></span> México</div>
         <div class="motivos" style="margin-top:4px">${motivosHtml(perdidos.mexico.motivos,'var(--mexico)')}</div></div>
     </div>
-    <div style="display:flex;gap:6px;margin-bottom:10px">
-      <button class="gtog active" id="pscore-tog-renda" onclick="setPScoreView('renda')">Faixa de Renda</button>
-      <button class="gtog" id="pscore-tog-cargo" onclick="setPScoreView('cargo')">Cargo</button>
+    <div style="display:inline-flex;gap:3px;margin-bottom:12px;background:var(--border);border-radius:8px;padding:3px">
+      <button id="pscore-tog-renda" onclick="setPScoreView('renda')" style="background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Renda</button>
+      <button id="pscore-tog-cargo" onclick="setPScoreView('cargo')" style="background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Cargo</button>
     </div>
     <div class="charts-2">
       <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-chile">Faixa de Renda (perdidos) · <span class="fi fi-cl"></span> Chile</div><div class="cwrap md"><canvas id="ch-perd-score-chile"></canvas></div></div>
