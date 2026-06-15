@@ -1807,7 +1807,7 @@ async function loadData(){
     const url='/api/report'+(mesSel?`?mes=${mesSel}`:'');
     const r=await fetch(url);const j=await r.json();
     if(!j.ok)throw new Error(j.error);
-    DATA=j;render();
+    DATA=j;popularMeses(j.mes);render();
     document.getElementById('btnComparar').disabled=false;
     document.getElementById('btnPdf').disabled=false;
     loadHistorico();
