@@ -513,7 +513,12 @@ app.get('/api/report', async(req,res)=>{
       faixasLabels:faixas.map(f=>f.legenda),
       criados:{
         total:C.total,
-        mediaDia:allDays.length?+(C.total/allDays.length).toFixed(1):0,
+        mediaDia:(()=>{
+        const hoje=new Date();
+        const hojeStr=hoje.toISOString().substring(0,10);
+        const diasPassados=allDays.filter(d=>d<=hojeStr).length||allDays.length;
+        return+(C.total/diasPassados).toFixed(1);
+      })(),
         chile:{total:C.chile.total,status:C.chile.st,pct:C.total>0?Math.round(C.chile.total/C.total*100):0,scoreFaixas:serFaixas(C.chile.scoreFaixas,C.chile.total),cargoFaixas:serFaixasCargo(C.chile.cargoFaixas,C.chile.total)},
         mexico:{total:C.mexico.total,status:C.mexico.st,pct:C.total>0?Math.round(C.mexico.total/C.total*100):0,scoreFaixas:serFaixas(C.mexico.scoreFaixas,C.mexico.total),cargoFaixas:serFaixasCargo(C.mexico.cargoFaixas,C.mexico.total)},
         referidos:C.referidos,
@@ -547,7 +552,12 @@ app.get('/api/report', async(req,res)=>{
       perdidos:{
         total:P.total,
         deals:P.deals||[],
-        mediaDia:allDays.length?+(P.total/allDays.length).toFixed(1):0,
+        mediaDia:(()=>{
+          const hoje=new Date();
+          const hojeStr=hoje.toISOString().substring(0,10);
+          const diasPassados=allDays.filter(d=>d<=hojeStr).length||allDays.length;
+          return+(P.total/diasPassados).toFixed(1);
+        })(),
         chile:{total:P.chile.total,pct:P.total>0?Math.round(P.chile.total/P.total*100):0,motivos:Object.entries(P.chile.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.chile.total?Math.round(c/P.chile.total*100):0})),scoreFaixas:serFaixas(P.chile.scoreFaixas,P.chile.total),cargoFaixas:serFaixasCargo(P.chile.cargoFaixas,P.chile.total)},
         mexico:{total:P.mexico.total,pct:P.total>0?Math.round(P.mexico.total/P.total*100):0,motivos:Object.entries(P.mexico.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.mexico.total?Math.round(c/P.mexico.total*100):0})),scoreFaixas:serFaixas(P.mexico.scoreFaixas,P.mexico.total),cargoFaixas:serFaixasCargo(P.mexico.cargoFaixas,P.mexico.total)},
         porDia:allDays.map(d=>({d,v:P.porDia[d]||0})),
