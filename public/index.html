@@ -524,6 +524,25 @@ function deltaHtml(atual,anterior){
 }
 
 /* ── Auxiliar ─────────────────────────────────────────────── */
+async function limparCacheAuxiliar(btn){
+  btn.disabled=true;btn.textContent='⏳ Limpando…';
+  try{
+    const r=await fetch('/api/cache/clear',{method:'POST'});
+    const j=await r.json();
+    if(j.ok){
+      btn.textContent='✅ Feito!';
+      setTimeout(async()=>{
+        btn.textContent='⏳ Recarregando…';
+        await doRefresh();
+        switchTab('auxiliar');
+      },500);
+    }
+  }catch(e){
+    btn.textContent='❌ Erro';
+    setTimeout(()=>{btn.disabled=false;btn.textContent='🔄 Recarregar Regras';},2000);
+  }
+}
+
 function renderAuxiliar(){
   const el=document.getElementById('auxiliar-content');
   if(!DATA){el.innerHTML='<div class="state-wrap"><span>Aguardando dados…</span></div>';return;}
@@ -537,6 +556,9 @@ function renderAuxiliar(){
         <div class="ph-badge">Auxiliar · Mapeamento de Cargo</div>
         <div class="ph-ttl">Cargos Não Mapeados</div>
         <div class="ph-sub">Valores brutos do campo Cargo no Pipedrive que não encontraram correspondência na planilha de score · ${fmtN(total)} leads sem mapeamento</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="tbtn" onclick="limparCacheAuxiliar(this)" title="Atualiza as regras da planilha sem esperar o cache expirar">🔄 Recarregar Regras</button>
       </div>
     </div>
 
