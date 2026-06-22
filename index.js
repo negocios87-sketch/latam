@@ -79,8 +79,9 @@ function parsePontuacao(v){
 
 async function carregarRegrasScore(){
   try{
-    const txt=await cachedFetch(SCORE_RULES_URL).catch(()=>null);
-    if(!txt)return[];
+    const _sr=await fetch(SCORE_RULES_URL,{cache:'no-store'}).catch(()=>null);
+    if(!_sr||!_sr.ok)return[];
+    const txt=await _sr.text();
     const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
     if(!linhas.length)return[];
     const delim=linhas[0].includes('\t')?'\t':',';
@@ -140,8 +141,8 @@ function diasUteis(de,ate,feriados){
 async function carregarMetasLatam(curYM){
   try{
     const[txtC,txtM]=await Promise.all([
-      cachedFetch(COLABORADORES_URL).catch(()=>null),
-      cachedFetch(METAS_URL).catch(()=>null),
+      cachedFetch(COLABORADORES_URL,60*1000).catch(()=>null),
+      cachedFetch(METAS_URL,60*1000).catch(()=>null),
     ]);
     if(!txtC||!txtM)return{total:0,porCloser:{},diasUteisDoMes:0};
 
