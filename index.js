@@ -686,6 +686,30 @@ app.get('/api/historico', async(req,res)=>{
   }
 });
 
+// ── DEBUG: cargo raw ─────────────────────────────────────────
+app.get('/api/debug-cargo', async(req,res)=>{
+  try{
+    const r=await fetch(SCORE_RULES_URL,{cache:'no-store'});
+    const txt=await r.text();
+    const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
+    const delim=linhas[0].includes('\t')?'\t':',';
+    const regras=linhas.slice(1).map(line=>{
+      const cols=parseCsvLine(line,delim);
+      return{tipo:cols[0],contem:cols[1],pontuacao:cols[2],pais:cols[3],legenda:cols[4]};
+    }).filter(r=>normalizarTexto(r.tipo)==='cargo');
+
+    // Testa alguns valores problemáticos
+    const testVals=['Executive','Teacher','Otro','Boss','Entrepreneur','Supervisor'];
+    const testes=testVals.map(v=>{
+      const norm=normalizarTexto(v);
+      const match=regras.find(r=>normalizarTexto(r.contem)&&norm.includes(normalizarTexto(r.contem)));
+      return{valor:v,norm,match:match?match.legenda:'❌ SEM MATCH',contemUsado:match?.contem};
+    });
+
+    res.json({ok:true,totalRegrasCargo:regras.length,primeiras5:regras.slice(0,5),testes});
+  }catch(e){res.status(500).json({ok:false,error:e.message});}
+});
+
 // ── Cache clear ───────────────────────────────────────────────
 app.post('/api/cache/clear', (req,res)=>{
   Object.keys(_cache).forEach(k=>delete _cache[k]);
