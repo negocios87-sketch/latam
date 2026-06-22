@@ -284,11 +284,18 @@ function dk(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
 
 const deltaPlugin={id:'delta',afterDatasetsDraw(chart){
   if(!chart.options.plugins?.delta?.show)return;
-  const{ctx}=chart,meta=chart.getDatasetMeta(0),data=chart.data.datasets[0].data;
-  for(let i=1;i<meta.data.length;i++){
-    const prev=data[i-1],curr=data[i];if(!prev||!curr)continue;
+  const{ctx}=chart;
+  const nPts=chart.data.datasets[0]?.data?.length||0;
+  // Soma todos os datasets para obter total por coluna
+  const totals=Array.from({length:nPts},(_,i)=>
+    chart.data.datasets.reduce((s,ds)=>s+(ds.data[i]||0),0)
+  );
+  const meta0=chart.getDatasetMeta(chart.data.datasets.length-1);
+  for(let i=1;i<nPts;i++){
+    const prev=totals[i-1],curr=totals[i];if(!prev||!curr)continue;
     const pct=(curr-prev)/prev*100,isPos=pct>=0;
-    const midX=(meta.data[i-1].x+meta.data[i].x)/2,topY=Math.min(meta.data[i-1].y,meta.data[i].y)-18;
+    const midX=(meta0.data[i-1].x+meta0.data[i].x)/2;
+    const topY=Math.min(...chart.data.datasets.map(ds=>chart.getDatasetMeta(chart.data.datasets.indexOf(ds)).data[i]?.y||9999))-18;
     ctx.save();ctx.font='bold 9px DM Sans,sans-serif';ctx.fillStyle=isPos?'#166534':'#991b1b';
     ctx.textAlign='center';ctx.fillText((isPos?'▲':'▼')+Math.abs(pct).toFixed(0)+'%',midX,topY);ctx.restore();
   }
@@ -373,50 +380,9 @@ function metasHtml(metas){
   const receitaAtual=metas.receitaAtual||0;
   const pctTotal=metas.total>0?+((receitaAtual/metas.total)*100).toFixed(1):0;
   const pctMTD=metas.mtd>0?+((receitaAtual/metas.mtd)*100).toFixed(1):0;
-  const colPct=(p)=>p>=100?'#4a7c6a':p>=80?'#b8873f':'#c0533a';
-  const colBg=(p)=>p>=100?'rgba(74,124,106,.15)':p>=80?'rgba(184,135,63,.12)':'rgba(192,83,58,.1)';
+  const colPct=(p)=>p>=100?'var(--sage)':p>=80?'var(--gold)':'var(--rust)';
 
-  const metaCard=(label,pct,meta,du,realizado)=>{
-    const w=Math.min(pct,100);
-    const col=colPct(pct);
-    const bg=colBg(pct);
-    return`<div style="background:${bg};border:1px solid ${col}33;border-radius:10px;padding:18px 20px;flex:1">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-        <div>
-          <div style="font-size:.58rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:${col};margin-bottom:4px">${label}</div>
-          <div style="font-family:'Fraunces',serif;font-size:1.6rem;font-weight:700;color:#1c2b3a;line-height:1">${brl2(meta)}</div>
-          <div style="font-size:.68rem;color:#8a8277;margin-top:3px">${du} dias úteis</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:'Fraunces',serif;font-size:2rem;font-weight:700;color:${col};line-height:1">${pct}%</div>
-          <div style="font-size:.68rem;color:#8a8277;margin-top:3px">atingido</div>
-        </div>
-      </div>
-      <div style="background:rgba(0,0,0,.08);border-radius:6px;height:8px;margin-bottom:10px">
-        <div style="width:${w}%;height:8px;border-radius:6px;background:${col};transition:width .8s cubic-bezier(.4,0,.2,1)"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:.75rem;color:#8a8277">Realizado</span>
-        <span style="font-size:.82rem;font-weight:700;color:#1c2b3a">${brl2(realizado)}</span>
-      </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:3px">
-        <span style="font-size:.75rem;color:#8a8277">Faltam</span>
-        <span style="font-size:.78rem;font-weight:600;color:${col}">${brl2(Math.max(0,meta-realizado))}</span>
-      </div>
-    </div>`;
-  };
-
-  // Mescla: closers com meta + closers sem meta que têm vendas
-  const closerMap={};
-  (metas.porCloser||[]).forEach(c=>{closerMap[c.nome]=c;});
-  // Adiciona vendas de quem não tem meta (vem dos deals via enriched)
-  if(metas.vendsPorProprietario){
-    Object.entries(metas.vendsPorProprietario).forEach(([nome,v])=>{
-      if(!closerMap[nome])closerMap[nome]={nome,vendas:v.t,receita:v.r,meta:0,pctMeta:0,pctMTD:0};
-    });
-  }
-  const todosClosers=Object.values(closerMap).sort((a,b)=>b.receita-a.receita);
-  const closerRows=todosClosers.map(c=>{
+  const closerRows=(metas.porCloser||[]).map(c=>{
     const colM=colPct(c.pctMeta);
     const colD=colPct(c.pctMTD);
     const temMeta=c.meta>0;
@@ -443,14 +409,29 @@ function metasHtml(metas){
       </div>
     </div>
     <div>
-      <div class="sec-lbl2" style="margin-bottom:10px">Atingimento de Meta<span></span></div>
-      <div style="display:flex;flex-direction:column;gap:10px">
-        ${metaCard('Meta do Mês',pctTotal,metas.total,metas.duMes,receitaAtual)}
-        ${metaCard('Meta MTD · Pace',pctMTD,metas.mtd,metas.duMTD,receitaAtual)}
+      <div class="sec-lbl2" style="margin-bottom:10px">Atingimento de Meta<span></span>
+        <span style="font-size:.68rem;color:var(--muted);font-weight:400">${pctTotal}% mês · ${pctMTD}% MTD</span>
+      </div>
+      <div class="ccard" style="padding:14px 16px">
+        <div style="position:relative;height:180px"><canvas id="ch-meta-jacare"></canvas></div>
+        <div style="display:flex;gap:16px;margin-top:10px;justify-content:center">
+          <span style="font-size:.7rem;color:#8a8277;display:flex;align-items:center;gap:5px">
+            <span style="display:inline-block;width:20px;height:2px;background:var(--border);border-top:2px dashed var(--muted)"></span>Meta acumulada
+          </span>
+          <span style="font-size:.7rem;color:#8a8277;display:flex;align-items:center;gap:5px">
+            <span style="display:inline-block;width:20px;height:2px;background:var(--sage)"></span>Realizado
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.72rem">
+          <span style="color:var(--muted)">Realizado: <strong style="color:var(--navy)">${brl2(receitaAtual)}</strong></span>
+          <span style="color:var(--muted)">Meta: <strong style="color:var(--navy)">${brl2(metas.total)}</strong></span>
+          <span style="color:${colPct(pctTotal)};font-weight:700">${pctTotal}% atingido</span>
+        </div>
       </div>
     </div>
   </div>`;
 }
+
 
 function otHtml(data,col){
   if(!data||!data.length)return'<div style="color:var(--muted);font-size:.78rem">Sem dados.</div>';
@@ -1156,6 +1137,83 @@ function setPScoreView(v){
   else{mkScoreLine('ch-perd-score-chile',dataChile,'#c0392b',null);mkScoreLine('ch-perd-score-mexico',dataMexico,'#1a6b3c',null);}
 }
 
+function mkMetaJacare(data,dLabels,allDays){
+  dk('ch-meta-jacare');
+  const ctx=document.getElementById('ch-meta-jacare');if(!ctx)return;
+  if(!data||!data.ganhos?.metas?.total)return;
+
+  const metas=data.ganhos.metas;
+  const hoje=new Date().toISOString().substring(0,10);
+  const duMes=metas.duMes||1;
+  const metaTotal=metas.total||0;
+
+  // Distribui meta linearmente pelos dias úteis
+  // Para simplificar: meta/duMes por dia útil, 0 nos fins de semana
+  // Acumula meta dia a dia
+  let metaAcum=0;
+  const metaLine=[];
+  const realLine=[];
+  let realAcum=0;
+
+  // Dias úteis totais até cada dia
+  let duContados=0;
+  allDays.forEach(d=>{
+    const dow=new Date(d+'T12:00:00Z').getUTCDay();
+    const isUtil=dow>=1&&dow<=5;
+    if(isUtil)duContados++;
+    metaAcum=duMes>0?metaTotal*(duContados/duMes):0;
+    metaLine.push(+metaAcum.toFixed(0));
+
+    const ganhosDia=data.ganhos.porDia.find(x=>x.d===d);
+    realAcum+=(ganhosDia?.r||0);
+    realLine.push(d<=hoje?+realAcum.toFixed(0):null);
+  });
+
+  charts['ch-meta-jacare']=new Chart(ctx,{type:'line',
+    data:{labels:dLabels,datasets:[
+      {
+        label:'Meta acumulada',
+        data:metaLine,
+        borderColor:'rgba(28,43,58,.25)',
+        borderWidth:1.5,
+        borderDash:[6,4],
+        backgroundColor:'transparent',
+        pointRadius:0,
+        tension:0,
+        fill:false,
+        datalabels:{display:false},
+      },
+      {
+        label:'Realizado',
+        data:realLine,
+        borderColor:'#4a7c6a',
+        backgroundColor:'rgba(74,124,106,.08)',
+        borderWidth:2,
+        pointRadius:0,
+        pointHoverRadius:4,
+        tension:0,
+        fill:true,
+        datalabels:{display:false},
+      },
+    ]},
+    options:{
+      responsive:true,maintainAspectRatio:false,
+      layout:{padding:{top:8,right:8}},
+      interaction:{mode:'index',intersect:false},
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          label:c=>`${c.dataset.label}: ${(c.parsed.y||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0})}`
+        }},
+      },
+      scales:{
+        x:{grid:{display:false},ticks:{font:{size:8},maxTicksLimit:10},border:{color:'transparent'}},
+        y:{grid:{color:GC},ticks:{font:{size:8},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v,maxTicksLimit:5},border:{color:'transparent'},beginAtZero:true},
+      },
+    },
+  });
+}
+
 function render(){
   if(!DATA)return;
   const{criados,ganhos,perdidos}=DATA;
@@ -1168,6 +1226,7 @@ function render(){
   const gStats=computeGanhosStats(enriched);
 
   const dLabels=criados.porDia.map(x=>fmtD(x.d));
+  const allDays2=criados.porDia.map(x=>x.d);
   const wLabels=criados.porSemana.map(x=>fmtW(x.w));
   const snapC=SNAP&&SNAP.data?SNAP.data.criados:null;
   const ref=criados.referidos||{total:0,a:0,g:0,p:0};
@@ -1353,6 +1412,8 @@ function render(){
   mkScoreLine('ch-score-chile',_chileScoreData,'#c0392b',snapSCh.length?snapSCh:null);
   mkScoreLine('ch-score-mexico',_mexicoScoreData,'#1a6b3c',snapSMx.length?snapSMx:null);
   mkBar('ch-gan-dia',dLabels,ganhos.porDia.map(x=>x.v),'#4a7c6a',{maxTicks:20});
+  // Gráfico jacaré de meta
+  setTimeout(()=>mkMetaJacare(DATA,dLabels,allDays2),0);
   // gráfico semanal de ganhos removido
   mkBar('ch-perd-dia',dLabels,perdidos.porDia.map(x=>x.v),'#c0533a',{maxTicks:20});
   mkBar('ch-perd-sem',wLabels,perdidos.porSemana.map(x=>x.v),'#c0533a',{weekly:true});
