@@ -395,6 +395,12 @@ app.get('/api/report', async(req,res)=>{
         const legendaCargo=getCargoLegenda(deal,regrasScore);
         if(pc.cargoFaixas[legendaCargo]!==undefined)pc.cargoFaixas[legendaCargo]++;
         else pc.cargoFaixas['Não informado']=(pc.cargoFaixas['Não informado']||0)+1;
+        // Acumula valores brutos não mapeados
+        if(legendaCargo==='Não informado'){
+          const rawCargo=String(deal[FIELD_CARGO]||'(vazio)').trim();
+          C.cargoNaoMapeado=C.cargoNaoMapeado||{};
+          C.cargoNaoMapeado[rawCargo]=(C.cargoNaoMapeado[rawCargo]||0)+1;
+        }
         if(ref){
           C.referidos.total++;
           if(deal.status==='open')C.referidos.a++;
@@ -511,6 +517,9 @@ app.get('/api/report', async(req,res)=>{
     res.json({
       ok:true,mes:curYM,updatedAt:new Date().toISOString(),
       faixasLabels:faixas.map(f=>f.legenda),
+      cargoNaoMapeado:Object.entries(C.cargoNaoMapeado||{})
+        .sort((a,b)=>b[1]-a[1])
+        .map(([raw,count])=>({raw,count})),
       criados:{
         total:C.total,
         mediaDia:(()=>{
