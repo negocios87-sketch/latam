@@ -205,6 +205,7 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
       <button class="tab-btn" id="btn-tab-fechamento" onclick="switchTab('fechamento')">📅 Fechamento</button>
       <button class="tab-btn" id="btn-tab-class" onclick="switchTab('class')">🏷 Classificação</button>
       <button class="tab-btn" id="btn-tab-analises" onclick="switchTab('analises')">🔍 Análises</button>
+      <button class="tab-btn" id="btn-tab-auxiliar" onclick="switchTab('auxiliar')">🔧 Auxiliar</button>
     </div>
   </div>
   <div class="tb-right">
@@ -259,6 +260,10 @@ tfoot td:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}
 
 <div class="page" id="tab-analises" style="display:none">
   <div id="analises-content"><div class="state-wrap"><span>Aguardando dados…</span></div></div>
+</div>
+
+<div class="page" id="tab-auxiliar" style="display:none">
+  <div id="auxiliar-content"><div class="state-wrap"><span>Aguardando dados…</span></div></div>
 </div>
 
 <div class="page" id="tab-class" style="display:none">
@@ -516,6 +521,53 @@ function deltaHtml(atual,anterior){
   if(Math.abs(pct)<0.5)return`<span class="kpi-delta delta-eq">= mesmo</span>`;
   const up=pct>0;
   return`<span class="kpi-delta ${up?'delta-up':'delta-dn'}">${up?'▲':'▼'} ${abs} vs snap</span>`;
+}
+
+/* ── Auxiliar ─────────────────────────────────────────────── */
+function renderAuxiliar(){
+  const el=document.getElementById('auxiliar-content');
+  if(!DATA){el.innerHTML='<div class="state-wrap"><span>Aguardando dados…</span></div>';return;}
+
+  const dados=DATA.cargoNaoMapeado||[];
+  const total=dados.reduce((s,d)=>s+d.count,0);
+
+  el.innerHTML=`
+    <div class="ph-row">
+      <div>
+        <div class="ph-badge">Auxiliar · Mapeamento de Cargo</div>
+        <div class="ph-ttl">Cargos Não Mapeados</div>
+        <div class="ph-sub">Valores brutos do campo Cargo no Pipedrive que não encontraram correspondência na planilha de score · ${fmtN(total)} leads sem mapeamento</div>
+      </div>
+    </div>
+
+    <div class="twrap">
+      <table>
+        <thead><tr>
+          <th>Valor bruto no Pipedrive</th>
+          <th>Qtd leads</th>
+          <th>% do total não mapeado</th>
+        </tr></thead>
+        <tbody>
+          ${dados.length===0
+            ?'<tr><td colspan="3" style="padding:16px;text-align:center;color:var(--muted)">Todos os cargos estão mapeados 🎉</td></tr>'
+            :dados.map(d=>`<tr>
+              <td class="td-name" style="font-family:monospace;font-size:.8rem">${esc(d.raw)}</td>
+              <td style="text-align:right">${fmtN(d.count)}</td>
+              <td style="text-align:right;color:var(--muted)">${total>0?((d.count/total)*100).toFixed(1):'0'}%</td>
+            </tr>`).join('')
+          }
+        </tbody>
+        ${dados.length>0?`<tfoot><tr>
+          <td>Total não mapeado</td>
+          <td style="text-align:right">${fmtN(total)}</td>
+          <td></td>
+        </tr></tfoot>`:''}
+      </table>
+    </div>
+
+    <div class="pfooter">
+      <span>Para mapear: adicione uma linha na planilha de score com tipo=cargo, contem=valor acima, legenda=nome do cargo</span>
+    </div>`;
 }
 
 /* ── Fechamento ─────────────────────────────────────────────── */
@@ -1540,7 +1592,7 @@ function limparClassificacao(){
 /* ── Tabs ──────────────────────────────────────────────────── */
 function switchTab(tab){
   CURTAB=tab;
-  ['dash','fechamento','class','analises'].forEach(t=>{
+  ['dash','fechamento','class','analises','auxiliar'].forEach(t=>{
     const el=document.getElementById('tab-'+t);
     if(el)el.style.display=t===tab?'block':'none';
   });
@@ -1548,9 +1600,11 @@ function switchTab(tab){
   document.getElementById('btn-tab-fechamento').className='tab-btn'+(tab==='fechamento'?' active':'');
   document.getElementById('btn-tab-class').className='tab-btn'+(tab==='class'?' active-class':'');
   document.getElementById('btn-tab-analises').className='tab-btn'+(tab==='analises'?' active':'');
+  document.getElementById('btn-tab-auxiliar').className='tab-btn'+(tab==='auxiliar'?' active':'');
   if(tab==='class')renderClassificacao();
   if(tab==='analises')renderAnalises();
   if(tab==='fechamento')renderFechamento();
+  if(tab==='auxiliar')renderAuxiliar();
 }
 
 /* ── Snapshot / Comparação ───────────────────────────────── */
