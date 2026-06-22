@@ -685,6 +685,14 @@ app.get('/api/historico', async(req,res)=>{
   }
 });
 
+// ── Cache clear ───────────────────────────────────────────────
+app.post('/api/cache/clear', (req,res)=>{
+  Object.keys(_cache).forEach(k=>delete _cache[k]);
+  Object.keys(_dealsCache).forEach(k=>delete _dealsCache[k]);
+  console.log('[cache] limpo manualmente');
+  res.json({ok:true,msg:'Cache limpo. Próxima requisição buscará dados frescos.'});
+});
+
 // ── DEBUG: ver valores reais do campo renda (mês atual) ──────
 app.get('/api/debug-renda', async(req,res)=>{
   if(!API_TOKEN)return res.status(500).json({ok:false,error:'sem token'});
