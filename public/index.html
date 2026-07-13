@@ -438,6 +438,52 @@ function metasHtml(metas){
 }
 
 
+function turmasHtml(turmas){
+  if(!turmas||!turmas.length)return'';
+  const farol=(real,min,ideal)=>{
+    if(real>=ideal)return{cor:'var(--sage)',bg:'#dcfce7',label:'Acima do ideal'};
+    if(real>=min)return{cor:'var(--gold)',bg:'#fef9c3',label:'Acima do mínimo'};
+    return{cor:'var(--rust)',bg:'#fee2e2',label:'Abaixo do mínimo'};
+  };
+  const pct=(v,base)=>base>0?Math.round(v/base*100)+'%':'—';
+  const formatDate=(d)=>{
+    if(!d)return'—';
+    // Aceita dd/mm/yyyy ou yyyy-mm-dd
+    const parts=d.includes('/')?d.split('/'):d.split('-').reverse();
+    return parts.length===3?`${parts[0]}/${parts[1]}/${parts[2].slice(-2)}`:d;
+  };
+  return`<div style="display:flex;flex-direction:column;gap:8px">
+    ${turmas.map(t=>{
+      const f=farol(t.volumeReal,t.minimo,t.ideal);
+      return`<div style="background:${f.bg};border:1px solid ${f.cor}33;border-left:3px solid ${f.cor};border-radius:8px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <span style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${f.cor}">${t.produto==='Chile'?'CL · Chile':'MX · México'}</span>
+            <div style="font-family:'Fraunces',serif;font-size:.95rem;font-weight:700;color:var(--navy)">Turma ${esc(t.turma)}</div>
+            <div style="font-size:.7rem;color:var(--muted);margin-top:2px">Início: ${formatDate(t.dataInicio)}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:'Fraunces',serif;font-size:1.4rem;font-weight:700;color:${f.cor};line-height:1">${t.volumeReal}</div>
+            <div style="font-size:.65rem;color:var(--muted)">alunos</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="background:rgba(255,255,255,.6);border-radius:6px;padding:8px 10px">
+            <div style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Mínimo</div>
+            <div style="font-size:.9rem;font-weight:700;color:var(--navy)">${t.minimo} <span style="font-size:.72rem;font-weight:400;color:var(--muted)">alunos</span></div>
+            <div style="font-size:.75rem;font-weight:700;color:${t.volumeReal>=t.minimo?'var(--sage)':'var(--rust)'}">${pct(t.volumeReal,t.minimo)} atingido</div>
+          </div>
+          <div style="background:rgba(255,255,255,.6);border-radius:6px;padding:8px 10px">
+            <div style="font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:3px">Ideal</div>
+            <div style="font-size:.9rem;font-weight:700;color:var(--navy)">${t.ideal} <span style="font-size:.72rem;font-weight:400;color:var(--muted)">alunos</span></div>
+            <div style="font-size:.75rem;font-weight:700;color:${t.volumeReal>=t.ideal?'var(--sage)':'var(--gold)'}">${pct(t.volumeReal,t.ideal)} atingido</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
 function otHtml(data,col){
   if(!data||!data.length)return'<div style="color:var(--muted);font-size:.78rem">Sem dados.</div>';
   const max=Math.max(...data.map(d=>d.v),1);
@@ -1282,7 +1328,7 @@ function mkMetaJacare(data,dLabels,allDays){
       },
       scales:{
         x:{grid:{display:false},ticks:{font:{size:8},maxTicksLimit:10},border:{color:'transparent'}},
-        y:{grid:{color:GC},ticks:{font:{size:8},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v,maxTicksLimit:5},border:{color:'transparent'},beginAtZero:true},
+        y:{grid:{color:GC},ticks:{font:{size:8},callback:v=>v>=1000?'R$'+(v/1000).toFixed(0)+'k':'R$'+v,maxTicksLimit:5},border:{color:'transparent'},beginAtZero:true,max:metaTotal},
       },
     },
   });
@@ -1419,9 +1465,15 @@ function render(){
         </div>
         <div class="twrap">${expandTableGanhos(gStats.porOrigem,'go')}</div>
       </div>
-      <div class="ot-card">
-        <div class="ot-title">Quando foi criado o lead que virou venda</div>
-        <div class="ot-rows">${otHtml(ganhos.origemTemporal,'#4a7c6a')}</div>
+      <div>
+        <div class="ot-card" style="margin-bottom:10px">
+          <div class="ot-title">Quando foi criado o lead que virou venda</div>
+          <div class="ot-rows">${otHtml(ganhos.origemTemporal,'#4a7c6a')}</div>
+        </div>
+        ${DATA&&DATA.turmas&&DATA.turmas.length?`<div style="margin-top:0">
+          <div class="sec-lbl2" style="margin-bottom:8px">Próximas Turmas<span></span></div>
+          ${turmasHtml(DATA.turmas)}
+        </div>`:''}
       </div>
     </div>
 
