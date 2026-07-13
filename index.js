@@ -278,8 +278,9 @@ async function carregarTurmas(){
     const delim=linhas[0].includes('\t')?'\t':',';
     return linhas.slice(1).map(line=>{
       const cols=parseCsvLine(line,delim);
-      const produto=String(cols[0]||'').trim();
-      if(produto!=='Chile'&&produto!=='Mexico')return null;
+      const produtoRaw=String(cols[0]||'').trim();
+      const produto=produtoRaw.toUpperCase()==='CHILE'?'Chile':produtoRaw.toUpperCase()==='MEXICO'?'Mexico':null;
+      if(!produto)return null;
       return{
         produto,
         dataInicio:String(cols[1]||'').trim(),
