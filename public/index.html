@@ -1264,24 +1264,28 @@ function mkMetaJacare(data,dLabels,allDays){
 
   const metas=data.ganhos.metas;
   const hoje=new Date().toISOString().substring(0,10);
-  const duMes=metas.duMes||1;
   const metaTotal=metas.total||0;
 
-  // Distribui meta linearmente pelos dias úteis
-  // Para simplificar: meta/duMes por dia útil, 0 nos fins de semana
-  // Acumula meta dia a dia
+  // Feriados do mês vindos do backend
+  const feriadosSet=new Set(metas.feriadosMes||[]);
+
+  // Recalcula dias úteis reais do mês (seg-sex excluindo feriados)
+  const duMesReal=allDays.filter(d=>{
+    const dow=new Date(d+'T12:00:00Z').getUTCDay();
+    return dow>=1&&dow<=5&&!feriadosSet.has(d);
+  }).length||1;
+
+  // Distribui meta linearmente pelos dias úteis reais
   let metaAcum=0;
   const metaLine=[];
   const realLine=[];
   let realAcum=0;
-
-  // Dias úteis totais até cada dia
   let duContados=0;
   allDays.forEach(d=>{
     const dow=new Date(d+'T12:00:00Z').getUTCDay();
-    const isUtil=dow>=1&&dow<=5;
+    const isUtil=dow>=1&&dow<=5&&!feriadosSet.has(d);
     if(isUtil)duContados++;
-    metaAcum=duMes>0?metaTotal*(duContados/duMes):0;
+    metaAcum=metaTotal*(duContados/duMesReal);
     metaLine.push(+metaAcum.toFixed(0));
 
     const ganhosDia=data.ganhos.porDia.find(x=>x.d===d);
