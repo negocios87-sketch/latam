@@ -19,6 +19,8 @@ const COLABORADORES_URL  = process.env.COLABORADORES_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv';
 const METAS_URL          = process.env.METAS_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv';
+const TURMAS_URL = process.env.TURMAS_URL
+  || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=715115296&single=true&output=csv';
 const FERIADOS_URL       = process.env.FERIADOS_URL
   || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv';
 
@@ -96,7 +98,7 @@ async function carregarRegrasScore(){
         pais:      normalizarTexto(cols[3]),
         legenda:   String(cols[4]||'').trim(),
       };
-    }).filter(r=>r.tipo&&r.pontuacao!==null);
+    }).filter(r=>r.tipo&&(r.pontuacao!==null||r.legenda));
   }catch(e){console.warn('Score rules failed:',e.message);return[];}
 }
 
@@ -265,6 +267,31 @@ function buildFaixas(regras){
 }
 function emptyFaixas(faixas){return Object.fromEntries(faixas.map(f=>[f.legenda,0]));}
 
+// ── Turmas ───────────────────────────────────────────────────
+async function carregarTurmas(){
+  try{
+    const r=await fetch(TURMAS_URL,{cache:'no-store'});
+    if(!r.ok)return[];
+    const txt=await r.text();
+    const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
+    if(linhas.length<2)return[];
+    const delim=linhas[0].includes('\t')?'\t':',';
+    return linhas.slice(1).map(line=>{
+      const cols=parseCsvLine(line,delim);
+      const produto=String(cols[0]||'').trim();
+      if(produto!=='Chile'&&produto!=='Mexico')return null;
+      return{
+        produto,
+        dataInicio:String(cols[1]||'').trim(),
+        turma:String(cols[2]||'').trim(),
+        volumeReal:parseInt(String(cols[3]||'0').replace(/\D/g,''))||0,
+        minimo:parseInt(String(cols[4]||'0').replace(/\D/g,''))||0,
+        ideal:parseInt(String(cols[5]||'0').replace(/\D/g,''))||0,
+      };
+    }).filter(Boolean);
+  }catch(e){console.warn('Turmas failed:',e.message);return[];}
+}
+
 // ── Date utils ────────────────────────────────────────────────
 // Converte datetime UTC do Pipedrive para data no fuso America/Sao_Paulo (UTC-3)
 function toLocalDate(d){
@@ -339,11 +366,12 @@ app.get('/api/report', async(req,res)=>{
       :_defaultYM;
 
     console.log('[report] curYM:', curYM);
-    const[allDeals,regrasScore,feriados,metasData]=await Promise.all([
+    const[allDeals,regrasScore,feriados,metasData,turmas]=await Promise.all([
       fetchByFilterCached(FILTER_LATAM).catch(e=>{console.error('fetchByFilter:',e.message);throw e;}),
       carregarRegrasScore().catch(e=>{console.error('regrasScore:',e.message);return[];}),
       carregarFeriados().catch(e=>{console.error('feriados:',e.message);return new Set();}),
       carregarMetasLatam(curYM).catch(e=>{console.error('metas:',e.message);return{total:0,porCloser:{},diasUteisDoMes:0};}),
+      carregarTurmas().catch(e=>{console.error('turmas:',e.message);return[];}),
     ]);
     console.log('[report] deals:', allDeals.length, 'metas total:', metasData.total, 'closers:', Object.keys(metasData.porCloser||{}).length, 'porCloser:', JSON.stringify(Object.keys(metasData.porCloser||{})));
     // Garante estrutura mínima antes dos loops
@@ -518,6 +546,7 @@ app.get('/api/report', async(req,res)=>{
     res.json({
       ok:true,mes:curYM,updatedAt:new Date().toISOString(),
       faixasLabels:faixas.map(f=>f.legenda),
+      turmas,
       cargoNaoMapeado:Object.entries(C.cargoNaoMapeado||{})
         .sort((a,b)=>b[1]-a[1])
         .map(([raw,count])=>({raw,count})),
