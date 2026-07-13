@@ -573,6 +573,7 @@ app.get('/api/report', async(req,res)=>{
           total:metaTotal,
           mtd:metaMTD,
           duMes,duMTD,
+          feriadosMes:[...feriados].filter(d=>d.startsWith(curYM)),
           receitaAtual:G.deals.reduce((s,d)=>s+(d.valor||0),0),
           vendsPorProprietario:G.vendsPorProprietario,
           porCloser:Object.entries(metasDataSafe.porCloser)
