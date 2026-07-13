@@ -740,6 +740,20 @@ app.get('/api/debug-cargo', async(req,res)=>{
   }catch(e){res.status(500).json({ok:false,error:e.message});}
 });
 
+// ── DEBUG: turmas raw ────────────────────────────────────────
+app.get('/api/debug-turmas', async(req,res)=>{
+  try{
+    const r=await fetch(TURMAS_URL,{cache:'no-store'});
+    if(!r.ok)return res.status(500).json({ok:false,error:`HTTP ${r.status}`});
+    const txt=await r.text();
+    const linhas=txt.split(/\r?\n/).filter(l=>l.trim());
+    const delim=linhas[0].includes('\t')?'\t':',';
+    const todas=linhas.slice(0,15).map(l=>parseCsvLine(l,delim));
+    const turmas=await carregarTurmas();
+    res.json({ok:true,delim,header:todas[0],primeiras10:todas.slice(1),turmasFiltradas:turmas});
+  }catch(e){res.status(500).json({ok:false,error:e.message});}
+});
+
 // ── Cache clear ───────────────────────────────────────────────
 app.post('/api/cache/clear', (req,res)=>{
   Object.keys(_cache).forEach(k=>delete _cache[k]);
