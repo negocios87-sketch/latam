@@ -1059,7 +1059,7 @@ function renderAnalises(){
     <div class="ph-row">
       <div>
         <div class="ph-badge">LATAM · Análises de Perda</div>
-        <div class="ph-ttl">Deep Dive - Dados</div>
+        <div class="ph-ttl">Quebra de Muletas</div>
         <div class="ph-sub">Dados históricos completos · independente do mês selecionado</div>
       </div>
     </div>
@@ -1151,7 +1151,7 @@ function computeGanhosStats(enriched){
     if(!byOrigem[k])byOrigem[k]={t:0,rev:0,revReal:0,deals:[]};
     byOrigem[k].t++;byOrigem[k].rev+=d.valor;byOrigem[k].revReal+=d.valorReal;byOrigem[k].deals.push(d);
   }
-  const ORDER=['Normal','Primeira Parcela','Outras Parcelas','Não classificado'];
+  const ORDER=['Normal','Primeira Parcela','Outras Parcelas','Reserva','Não classificado'];
   const porOrigem=Object.entries(byOrigem).sort((a,b)=>{
     const ai=ORDER.indexOf(a[0]),bi=ORDER.indexOf(b[0]);
     return(ai<0?99:ai)-(bi<0?99:bi);
@@ -1389,7 +1389,7 @@ function render(){
       <div class="sec-title">Negócios Ganhos <span class="sec-date-tag tag-ganho">Data de Ganho · ${mes}</span></div>
       <div class="sec-divider div-ganho"></div>
     </div>
-    <div class="kpi-row kpi4">
+    <div class="kpi-row kpi5">
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Total vendas</div><div class="val">${fmtN(gStats.total)}</div><div class="sub">negócios ganhos</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
@@ -1400,6 +1400,11 @@ function render(){
       <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
         <div class="lbl"><span class="fi fi-mx" style="margin-right:5px;border-radius:2px"></span>México</div><div class="val" style="color:var(--mexico)">${fmtN(gStats.mexico.total)}</div>
         <div class="sub">${brl(gStats.mexico.receita)}</div></div>
+    
+      <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
+        <div class="lbl">Reservas</div>
+        <div class="val" style="color:var(--gold)">${fmtN(gStats.porOrigem?.find(o=>o.nome==='Reserva')?.t||0)}</div>
+        <div class="sub">${brl(gStats.porOrigem?.find(o=>o.nome==='Reserva')?.rev||0)}</div></div>
     </div>
 
     ${metasHtml(ganhos.metas)}
@@ -1550,6 +1555,7 @@ function renderClassificacao(){
                     <option value="Normal" ${cl.origem==='Normal'?'selected':''}>Normal</option>
                     <option value="Primeira Parcela" ${cl.origem==='Primeira Parcela'?'selected':''}>Primeira Parcela</option>
                     <option value="Outras Parcelas" ${cl.origem==='Outras Parcelas'?'selected':''}>Outras Parcelas</option>
+                    <option value="Reserva" ${cl.origem==='Reserva'?'selected':''}>Reserva</option>
                   </select>
                 </td>
                 <td><input type="number" class="cl-input" data-id="${d.id}" value="${cl.ticketCheio||''}" placeholder="${Math.round(d.valor)}" min="0" step="100"/></td>
