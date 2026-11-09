@@ -409,6 +409,17 @@ function mkScoreLine(id,items,col,snapItems){
         y:{grid:{color:GC},ticks:{font:{size:9},callback:v=>v+'%',maxTicksLimit:5},border:{color:'transparent'},beginAtZero:true,suggestedMax:40}}}});
 }
 
+function multSub(v){
+  if(v==null||isNaN(v))return'';
+  return`<div class="sub" style="font-size:.64rem;opacity:.8">c/ multiplicador ${Math.round(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0})}</div>`;
+}
+function carimboHtml(){
+  if(!DATA||!DATA.carimbo)return'';
+  const c=DATA.carimbo;
+  const av=(DATA.avisos||[]).length?`<div style="font-size:.68rem;color:var(--rust);margin-top:4px">⚠ ${DATA.avisos.map(esc).join(' · ')}</div>`:'';
+  return`<div style="font-size:.66rem;color:var(--muted);margin-top:6px;letter-spacing:.01em">CRN ${esc(c.crn)} · Recorte: ${esc(c.recorte)} · Leads: ${esc(c.leads)} · Valor: ${esc(c.valor)} · Squad e meta: ${esc(c.squad)} · Atualizado: ${esc(c.atualizado)}</div>${av}`;
+}
+
 function metasHtml(metas){
   if(!metas||!metas.total)return'';
   const brl2=n=>n.toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
@@ -426,7 +437,7 @@ function metasHtml(metas){
       <td style="font-size:.76rem">${c.vendas}</td>
       <td style="font-size:.76rem">${brl2(c.receita)}</td>
       <td style="font-size:.76rem;color:${temMeta?'inherit':'var(--muted)'}">${temMeta?brl2(c.meta):'—'}</td>
-      <td style="font-size:.76rem;font-weight:700;color:${temMeta?colM:'var(--muted)'}">${temMeta?c.pctMeta+'%':'—'}</td>
+      <td style="font-size:.76rem;font-weight:700;color:${temMeta?colM:'var(--muted)'}">${temMeta?c.pctMeta+'%':'—'}${temMeta&&c.pctMetaMult!=null?`<div style="font-size:.62rem;font-weight:400;color:var(--muted)">${c.pctMetaMult}% c/ mult.</div>`:''}</td>
       <td style="font-size:.76rem;font-weight:700;color:${temMeta?colD:'var(--muted)'}">${temMeta?c.pctMTD+'%':'—'}</td>
     </tr>`;
   }).join('');
@@ -445,7 +456,7 @@ function metasHtml(metas){
     </div>
     <div>
       <div class="sec-lbl2" style="margin-bottom:10px">Atingimento de Meta<span></span>
-        <span style="font-size:.68rem;color:var(--muted);font-weight:400">${pctTotal}% mês · ${pctMTD}% MTD</span>
+        <span style="font-size:.68rem;color:var(--muted);font-weight:400">${pctTotal}% mês · ${pctMTD}% MTD${metas.receitaMult!=null&&metas.total>0?` · ${(metas.receitaMult/metas.total*100).toFixed(1)}% c/ mult.`:''}</span>
       </div>
       <div class="ccard" style="padding:14px 16px">
         <div style="position:relative;height:180px"><canvas id="ch-meta-jacare"></canvas></div>
@@ -458,7 +469,7 @@ function metasHtml(metas){
           </span>
         </div>
         <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:.72rem">
-          <span style="color:var(--muted)">Realizado: <strong style="color:var(--navy)">${brl2(receitaAtual)}</strong></span>
+          <span style="color:var(--muted)">Realizado: <strong style="color:var(--navy)">${brl2(receitaAtual)}</strong>${metas.receitaMult!=null?` <span style="font-size:.64rem">(c/ mult. ${brl2(metas.receitaMult)})</span>`:''}</span>
           <span style="color:var(--muted)">Meta: <strong style="color:var(--navy)">${brl2(metas.total)}</strong></span>
           <span style="color:${colPct(pctTotal)};font-weight:700">${pctTotal}% atingido</span>
         </div>
@@ -631,7 +642,7 @@ function renderAuxiliar(){
       <div>
         <div class="ph-badge">Auxiliar · Mapeamento de Cargo</div>
         <div class="ph-ttl">Cargos Não Mapeados</div>
-        <div class="ph-sub">Valores brutos do campo Cargo no Pipedrive que não encontraram correspondência na planilha de score · ${fmtN(total)} leads sem mapeamento</div>
+        <div class="ph-sub">Valores brutos do campo Cargo no Pipedrive que não bateram com nenhuma regra de cargo da SC3 (CRN) e caem em "Outro" · ${fmtN(total)} leads sem mapeamento</div>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <button class="tbtn" onclick="limparCacheAuxiliar(this)" title="Atualiza as regras da planilha sem esperar o cache expirar">🔄 Recarregar Regras</button>
@@ -664,7 +675,7 @@ function renderAuxiliar(){
     </div>
 
     <div class="pfooter">
-      <span>Para mapear: adicione uma linha na planilha de score com tipo=cargo, contem=valor acima, legenda=nome do cargo</span>
+      <span>Para mapear um cargo novo: a regra SC3 muda na CRN (pedir ao Rodrigo)</span>
     </div>`;
 }
 
@@ -791,7 +802,7 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
 
     <!-- CRIADOS -->
     <div class="sec-block">
-      <div class="sec-eyebrow">Eixo temporal · Data de Criação</div>
+      <div class="sec-eyebrow">Eixo temporal · Data da última aplicação</div>
       <div class="sec-title">Leads Criados <span class="sec-date-tag tag-criado">${fmtMesLabel(mes)}</span></div>
       <div class="sec-divider div-latam"></div>
     </div>
@@ -814,7 +825,7 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Vendas</div><div class="val">${fmtN2(ganhosMes.t||0)}</div><div class="sub">negócios ganhos</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
-        <div class="lbl">Receita Pipe</div><div class="val">${brlK2(receitaPipe)}</div><div class="sub">${brl2(receitaPipe)}</div></div>
+        <div class="lbl">Receita Pipe</div><div class="val">${brlK2(receitaPipe)}</div><div class="sub">${brl2(receitaPipe)}</div>${multSub(ganhosMes.rm)}</div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
         <div class="lbl">Ticket Médio Real</div>
         <div class="val" style="color:var(--gold)">${ticketMedioPorMes[mes]>0?brlK2(ticketMedioPorMes[mes]):'—'}</div>
@@ -1257,7 +1268,7 @@ function mkMetaJacare(data,dLabels,allDays){
   if(!data||!data.ganhos?.metas?.total)return;
 
   const metas=data.ganhos.metas;
-  const hoje=new Date().toISOString().substring(0,10);
+  const hoje=data.hoje||new Date().toLocaleDateString('sv-SE',{timeZone:'America/Sao_Paulo'});
   const metaTotal=metas.total||0;
 
   // Feriados do mês vindos do backend
@@ -1370,12 +1381,13 @@ function render(){
         <div class="ph-badge">LATAM · Inteligência Comercial</div>
         <div class="ph-ttl">LATAM · ${mes}</div>
         <div class="ph-sub">Visão consolidada LATAM</div>
+        ${carimboHtml()}
       </div>
     </div>
 
     <!-- CRIADOS -->
     <div class="sec-block">
-      <div class="sec-eyebrow">Eixo temporal · Data de Criação</div>
+      <div class="sec-eyebrow">Eixo temporal · Data da última aplicação</div>
       <div class="sec-title">Leads Criados <span class="sec-date-tag tag-criado">Mês atual · ${mes}</span></div>
       <div class="sec-divider div-latam"></div>
     </div>
@@ -1415,7 +1427,7 @@ function render(){
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Total vendas</div><div class="val">${fmtN(gStats.total)}</div><div class="sub">negócios ganhos</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
-        <div class="lbl">Receita (valor Pipe)</div><div class="val">${brlK(gStats.receita)}</div><div class="sub">${brl(gStats.receita)}</div></div>
+        <div class="lbl">Receita (valor Pipe)</div><div class="val">${brlK(gStats.receita)}</div><div class="sub">${brl(gStats.receita)}</div>${multSub(ganhos.metas?.receitaMult)}</div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
         <div class="lbl">Reservas</div>
         <div class="val" style="color:var(--gold)">${fmtN(gStats.porOrigem?.find(o=>o.nome==='Reserva')?.t||0)}</div>
@@ -1776,7 +1788,7 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
 
 <div class="pg">
   <div class="sec-head" style="border-color:#1a6b8a">
-    <div class="sec-eyebrow">Eixo temporal · Data de Criação</div>
+    <div class="sec-eyebrow">Eixo temporal · Data da última aplicação</div>
     <div class="sec-title">Leads Criados · ${mes}</div>
   </div>
   <div class="krow">
