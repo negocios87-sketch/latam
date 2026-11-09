@@ -1,7 +1,8 @@
 """Painel LATAM · Board Academy — backend Python ligado à CRN.
 
 Regras: biblioteca crn (GitHub negocios87-sketch/CRN, branch main). Nada de regra reimplementada aqui.
-Variáveis de ambiente (Vercel): PIPEDRIVE_TOKEN, CRN_GITHUB_TOKEN, URL_COLAB, URL_METAS, URL_FERIADOS, TURMAS_URL.
+Variáveis de ambiente (Vercel): PIPEDRIVE_TOKEN e CRN_GITHUB_TOKEN. Links das planilhas: no código (ver abaixo),
+variável de ambiente com o mesmo nome tem prioridade.
 
 Parâmetros (carimbo):
 - Recorte: funil LATAM (LT1), Chile e México juntos.
@@ -75,6 +76,15 @@ for _antigo, _novo in (("PIPEDRIVE_API_TOKEN", "PIPEDRIVE_TOKEN"), ("COLABORADOR
                        ("METAS_URL", "URL_METAS"), ("FERIADOS_URL", "URL_FERIADOS")):
     if os.environ.get(_antigo) and not os.environ.get(_novo):
         os.environ.setdefault(_novo, os.environ[_antigo])
+
+# Links das planilhas publicadas (os mesmos do painel antigo). Decisão do Rodrigo (09/11/2026):
+# ficam no código para não precisar cadastrar na Vercel. Se a variável existir na Vercel, ela vale.
+# ATENÇÃO: foge da regra 7 da CRN (URL só em variável de ambiente). Se a planilha for republicada
+# com outro link, troque aqui ou cadastre a variável na Vercel.
+os.environ.setdefault("URL_COLAB", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1782440078&single=true&output=csv")
+os.environ.setdefault("URL_METAS", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=0&single=true&output=csv")
+os.environ.setdefault("URL_FERIADOS", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv")
+os.environ.setdefault("TURMAS_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=715115296&single=true&output=csv")
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app = Flask(__name__, static_folder=None)
