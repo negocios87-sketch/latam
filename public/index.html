@@ -307,6 +307,36 @@ const deltaPlugin={id:'delta',afterDatasetsDraw(chart){
 }};
 Chart.register(deltaPlugin);
 
+/* ── Consolidação LATAM (Chile + México somados) ── */
+function consolFaixas(obj,key){
+  if(!obj)return[];
+  if(Array.isArray(obj[key])&&obj[key].length)return obj[key];
+  const a=obj.chile?.[key]||[],b=obj.mexico?.[key]||[];
+  const tot=(obj.total)||((obj.chile?.total||0)+(obj.mexico?.total||0));
+  const m={};const ordem=[];
+  [...a,...b].forEach(f=>{if(!(f.label in m)){m[f.label]=0;ordem.push(f.label);}m[f.label]+=f.v||0;});
+  return ordem.map(l=>({label:l,v:m[l],pct:tot>0?+((m[l]/tot)*100).toFixed(1):0}));
+}
+function consolStatus(cr){
+  if(cr&&cr.status)return cr.status;
+  const c=cr?.chile?.status||{a:0,g:0,p:0},x=cr?.mexico?.status||{a:0,g:0,p:0};
+  return{a:(c.a||0)+(x.a||0),g:(c.g||0)+(x.g||0),p:(c.p||0)+(x.p||0)};
+}
+function consolMotivos(pe){
+  if(pe&&Array.isArray(pe.motivos))return pe.motivos;
+  const m={};
+  [...(pe?.chile?.motivos||[]),...(pe?.mexico?.motivos||[])].forEach(x=>{m[x.m]=(m[x.m]||0)+x.c;});
+  const tot=pe?.total||0;
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([mo,c])=>({m:mo,c,pct:tot?Math.round(c/tot*100):0}));
+}
+function histMotivosMes(p){
+  if(!p)return{};
+  if(p.motivos)return p.motivos;
+  const r={};
+  ['chile','mexico'].forEach(k=>Object.entries(p[k]?.motivos||{}).forEach(([m,c])=>{r[m]=(r[m]||0)+c;}));
+  return r;
+}
+
 function mkBar(id,labels,values,col,opts={}){
   dk(id);const ctx=document.getElementById(id);if(!ctx)return;
   const isW=opts.weekly||false;
@@ -458,7 +488,7 @@ function turmasHtml(turmas){
       return`<div style="background:${f.bg};border:1px solid ${f.cor}33;border-left:3px solid ${f.cor};border-radius:8px;padding:12px 14px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
           <div>
-            <span style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${f.cor}">${t.produto==='Chile'?'CL · Chile':'MX · México'}</span>
+            <span style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:${f.cor}">${t.produto==='Chile'?'<span class="fi fi-cl"></span>':'<span class="fi fi-mx"></span>'}</span>
             <div style="font-family:'Fraunces',serif;font-size:.95rem;font-weight:700;color:var(--navy)">Turma ${esc(t.turma)}</div>
             <div style="font-size:.7rem;color:var(--muted);margin-top:2px">Início: ${formatDate(t.dataInicio)}</div>
           </div>
@@ -688,10 +718,8 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
 
   // KPIs do mês de fechamento
   const criadosMes=(hist.criados.total[mes]||0);
-  const criadosChile=(hist.criados.chile[mes]||0);
-  const criadosMex=(hist.criados.mexico[mes]||0);
   const ganhosMes=hist.ganhos[mes]||{t:0,r:0};
-  const perdMes=hist.perdidos[mes]||{total:0,chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
+  const perdMes=hist.perdidos[mes]||{total:0,motivos:{}};
 
   // Receita real do mês
   const dealsGanhosMes=(ganhosMes.deals||[]).filter(d=>{
@@ -710,17 +738,14 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
   // Top motivos globais dos 3 meses
   const motivoCount={};
   meses3.forEach(ym=>{
-    const p=hist.perdidos[ym]||{};
-    ['chile','mexico'].forEach(pais=>{
-      Object.entries(p[pais]?.motivos||{}).forEach(([m,c])=>{
-        motivoCount[m]=(motivoCount[m]||0)+c;
-      });
+    Object.entries(histMotivosMes(hist.perdidos[ym])).forEach(([m,c])=>{
+      motivoCount[m]=(motivoCount[m]||0)+c;
     });
   });
   const topMotivos=Object.entries(motivoCount).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([m])=>m);
 
-  // Tabela motivos 3 meses por país
-  const motivosTable=(pais)=>`
+  // Tabela motivos 3 meses (LATAM consolidado)
+  const motivosTable=()=>`
     <table>
       <thead><tr>
         <th>Motivo</th>
@@ -728,8 +753,8 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
       </tr></thead>
       <tbody>${topMotivos.map(motivo=>{
         const vals=meses3.map(ym=>{
-          const total=(hist.perdidos[ym]?.[pais]?.total)||1;
-          const c=(hist.perdidos[ym]?.[pais]?.motivos?.[motivo])||0;
+          const total=(hist.perdidos[ym]?.total)||1;
+          const c=histMotivosMes(hist.perdidos[ym])[motivo]||0;
           return{c,pct:total>0?Math.round(c/total*100):0};
         });
         const maxC=Math.max(...vals.map(v=>v.c),1);
@@ -773,12 +798,6 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
     <div class="kpi-row kpi3">
       <div class="kpi"><div class="kpi-accent" style="background:var(--latam)"></div>
         <div class="lbl">Total · ${fmtMesLabel(mes)}</div><div class="val">${fmtN2(criadosMes)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
-        <div class="lbl">Chile</div><div class="val" style="color:var(--chile)">${fmtN2(criadosChile)}</div>
-        <div class="sub">${criadosMes>0?Math.round(criadosChile/criadosMes*100):0}% do total</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
-        <div class="lbl">México</div><div class="val" style="color:var(--mexico)">${fmtN2(criadosMex)}</div>
-        <div class="sub">${criadosMes>0?Math.round(criadosMex/criadosMes*100):0}% do total</div></div>
     </div>
     <div class="charts-1">
       <div class="ccard"><div class="ccard-ttl">Volume de Criados · últimos 5 meses</div>
@@ -817,26 +836,14 @@ function buildFechamentoHTML(meses5,hist,ticketMedioPorMes,classMap){
     <div class="kpi-row kpi3">
       <div class="kpi"><div class="kpi-accent" style="background:var(--rust)"></div>
         <div class="lbl">Total Perdidos</div><div class="val" style="color:var(--rust)">${fmtN2(perdMes.total||0)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
-        <div class="lbl">Chile</div><div class="val" style="color:var(--chile)">${fmtN2(perdMes.chile?.total||0)}</div>
-        <div class="sub">${perdMes.total>0?Math.round((perdMes.chile?.total||0)/perdMes.total*100):0}% do total</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
-        <div class="lbl">México</div><div class="val" style="color:var(--mexico)">${fmtN2(perdMes.mexico?.total||0)}</div>
-        <div class="sub">${perdMes.total>0?Math.round((perdMes.mexico?.total||0)/perdMes.total*100):0}% do total</div></div>
     </div>
     <div class="charts-1">
       <div class="ccard"><div class="ccard-ttl">Volume de Perdidos · últimos 5 meses</div>
         <div class="cwrap md"><canvas id="fech-perd-mes"></canvas></div></div>
     </div>
-    <div class="side-row">
-      <div>
-        <div class="sec-lbl2">Top Motivos · Chile <span class="pais-chip chip-chile" style="font-size:.65rem">CL</span><span></span></div>
-        <div class="twrap">${motivosTable('chile')}</div>
-      </div>
-      <div>
-        <div class="sec-lbl2">Top Motivos · México <span class="pais-chip chip-mexico" style="font-size:.65rem">MX</span><span></span></div>
-        <div class="twrap">${motivosTable('mexico')}</div>
-      </div>
+    <div>
+      <div class="sec-lbl2">Top Motivos · LATAM<span></span></div>
+      <div class="twrap">${motivosTable()}</div>
     </div>
 
     <!-- ANÁLISES -->
@@ -867,12 +874,11 @@ function renderGraficosFechamento(meses5,hist,ticketMedioPorMes){
   if(ctxC){
     charts['fech-cri-mes']=new Chart(ctxC,{type:'bar',
       data:{labels,datasets:[
-        {label:'Chile',data:meses5.map(ym=>hist.criados.chile[ym]||0),backgroundColor:meses5.map(ym=>ym===mes?'#c0392b99':'#c0392b33'),borderColor:meses5.map(ym=>ym===mes?'#c0392b':'#c0392b88'),borderWidth:1.5,borderRadius:4},
-        {label:'México',data:meses5.map(ym=>hist.criados.mexico[ym]||0),backgroundColor:meses5.map(ym=>ym===mes?'#1a6b3c99':'#1a6b3c33'),borderColor:meses5.map(ym=>ym===mes?'#1a6b3c':'#1a6b3c88'),borderWidth:1.5,borderRadius:4},
+        {label:'LATAM',data:meses5.map(ym=>hist.criados.total[ym]||0),backgroundColor:meses5.map(ym=>colBar(ym)),borderColor:meses5.map(ym=>borderBar(ym)),borderWidth:1.5,borderRadius:4},
       ]},
       options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},
-        plugins:{legend:{display:true,position:'bottom',labels:{font:{size:9},padding:10,boxWidth:9}},
-          datalabels:{display:false},tooltip:{mode:'index',intersect:false}},
+        plugins:{legend:{display:false},
+          datalabels:{display:true,color:'#1c2b3a',font:{family:'DM Sans',size:9,weight:'700'},anchor:'end',align:'top',offset:2},tooltip:{mode:'index',intersect:false}},
         scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}},border:{color:'transparent'}},
           y:{stacked:true,grid:{color:GC},ticks:{font:{size:9},maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
   }
@@ -912,12 +918,11 @@ function renderGraficosFechamento(meses5,hist,ticketMedioPorMes){
   if(ctxP){
     charts['fech-perd-mes']=new Chart(ctxP,{type:'bar',
       data:{labels,datasets:[
-        {label:'Chile',data:meses5.map(ym=>hist.perdidos[ym]?.chile?.total||0),backgroundColor:meses5.map(ym=>ym===mes?'#c0392b99':'#c0392b33'),borderColor:meses5.map(ym=>ym===mes?'#c0392b':'#c0392b88'),borderWidth:1.5,borderRadius:4},
-        {label:'México',data:meses5.map(ym=>hist.perdidos[ym]?.mexico?.total||0),backgroundColor:meses5.map(ym=>ym===mes?'#1a6b3c99':'#1a6b3c33'),borderColor:meses5.map(ym=>ym===mes?'#1a6b3c':'#1a6b3c88'),borderWidth:1.5,borderRadius:4},
+        {label:'LATAM',data:meses5.map(ym=>hist.perdidos[ym]?.total||0),backgroundColor:meses5.map(ym=>ym===mes?'#c0533a99':'#c0533a33'),borderColor:meses5.map(ym=>ym===mes?'#c0533a':'#c0533a88'),borderWidth:1.5,borderRadius:4},
       ]},
       options:{responsive:true,maintainAspectRatio:false,layout:{padding:{top:24}},
-        plugins:{legend:{display:true,position:'bottom',labels:{font:{size:9},padding:10,boxWidth:9}},
-          datalabels:{display:false},tooltip:{mode:'index',intersect:false}},
+        plugins:{legend:{display:false},
+          datalabels:{display:true,color:'#1c2b3a',font:{family:'DM Sans',size:9,weight:'700'},anchor:'end',align:'top',offset:2},tooltip:{mode:'index',intersect:false}},
         scales:{x:{stacked:true,grid:{display:false},ticks:{font:{size:10}},border:{color:'transparent'}},
           y:{stacked:true,grid:{color:GC},ticks:{font:{size:9},maxTicksLimit:4},border:{color:'transparent'},beginAtZero:true}}}});
   }
@@ -1189,8 +1194,6 @@ function computeGanhosStats(enriched){
   const receita=enriched.reduce((s,d)=>s+d.valor,0);
   const somaTickets=enriched.reduce((s,d)=>s+d.valorReal,0);
   const ticket=total>0?somaTickets/total:0;
-  const chile=enriched.filter(d=>d.pais==='CHILE');
-  const mexico=enriched.filter(d=>d.pais==='MEXICO');
   const byOrigem={};
   for(const d of enriched){
     const k=d.origem||'Não classificado';
@@ -1202,10 +1205,7 @@ function computeGanhosStats(enriched){
     const ai=ORDER.indexOf(a[0]),bi=ORDER.indexOf(b[0]);
     return(ai<0?99:ai)-(bi<0?99:bi);
   }).map(([nome,x])=>({nome,t:x.t,rev:x.rev,revReal:x.revReal,ticketReal:x.t?(x.revReal/x.t):0,deals:x.deals}));
-  return{total,receita,ticket,somaTickets,
-    chile:{total:chile.length,receita:chile.reduce((s,d)=>s+d.valor,0)},
-    mexico:{total:mexico.length,receita:mexico.reduce((s,d)=>s+d.valor,0)},
-    porOrigem};
+  return{total,receita,ticket,somaTickets,porOrigem};
 }
 
 function updateClassBadge(){
@@ -1228,16 +1228,13 @@ function setScoreView(v){
   document.getElementById('score-tog-renda').style.cssText=v==='renda'?_sActive:_sInact;
   document.getElementById('score-tog-cargo').style.cssText=v==='cargo'?_sActive:_sInact;
   const lbl=v==='renda'?'Faixa de Renda':'Cargo';
-  document.getElementById('score-ttl-chile').innerHTML=`${lbl} · <span class="fi fi-cl"></span> Chile`;
-  document.getElementById('score-ttl-mexico').innerHTML=`${lbl} · <span class="fi fi-mx"></span> México`;
+  document.getElementById('score-ttl').innerHTML=`${lbl} · LATAM`;
   if(!DATA)return;
-  const cr=DATA.criados;
-  const snapSCh=SNAP&&SNAP.data?SNAP.data.criados?.chile?.[v==='renda'?'scoreFaixas':'cargoFaixas']||[]:[];
-  const snapSMx=SNAP&&SNAP.data?SNAP.data.criados?.mexico?.[v==='renda'?'scoreFaixas':'cargoFaixas']||[]:[];
-  const dataChile=v==='renda'?cr.chile.scoreFaixas:cr.chile.cargoFaixas;
-  const dataMexico=v==='renda'?cr.mexico.scoreFaixas:cr.mexico.cargoFaixas;
-  if(v==='cargo'){mkScoreBarH('ch-score-chile',dataChile,'#c0392b');mkScoreBarH('ch-score-mexico',dataMexico,'#1a6b3c');}
-  else{mkScoreLine('ch-score-chile',dataChile,'#c0392b',snapSCh.length?snapSCh:null);mkScoreLine('ch-score-mexico',dataMexico,'#1a6b3c',snapSMx.length?snapSMx:null);}
+  const key=v==='renda'?'scoreFaixas':'cargoFaixas';
+  const dados=consolFaixas(DATA.criados,key);
+  const snapS=SNAP&&SNAP.data?consolFaixas(SNAP.data.criados,key):[];
+  if(v==='cargo')mkScoreBarH('ch-score',dados,'#1a6b8a');
+  else mkScoreLine('ch-score',dados,'#1a6b8a',snapS.length?snapS:null);
 }
 
 function setPScoreView(v){
@@ -1247,14 +1244,11 @@ function setPScoreView(v){
   document.getElementById('pscore-tog-renda').style.cssText=v==='renda'?_psActive:_psInact;
   document.getElementById('pscore-tog-cargo').style.cssText=v==='cargo'?_psActive:_psInact;
   const lbl=v==='renda'?'Faixa de Renda (perdidos)':'Cargo (perdidos)';
-  document.getElementById('pscore-ttl-chile').innerHTML=`${lbl} · <span class="fi fi-cl"></span> Chile`;
-  document.getElementById('pscore-ttl-mexico').innerHTML=`${lbl} · <span class="fi fi-mx"></span> México`;
+  document.getElementById('pscore-ttl').innerHTML=`${lbl} · LATAM`;
   if(!DATA)return;
-  const pe=DATA.perdidos;
-  const dataChile=v==='renda'?pe.chile.scoreFaixas:pe.chile.cargoFaixas;
-  const dataMexico=v==='renda'?pe.mexico.scoreFaixas:pe.mexico.cargoFaixas;
-  if(v==='cargo'){mkScoreBarH('ch-perd-score-chile',dataChile,'#c0392b');mkScoreBarH('ch-perd-score-mexico',dataMexico,'#1a6b3c');}
-  else{mkScoreLine('ch-perd-score-chile',dataChile,'#c0392b',null);mkScoreLine('ch-perd-score-mexico',dataMexico,'#1a6b3c',null);}
+  const dados=consolFaixas(DATA.perdidos,v==='renda'?'scoreFaixas':'cargoFaixas');
+  if(v==='cargo')mkScoreBarH('ch-perd-score',dados,'#c0533a');
+  else mkScoreLine('ch-perd-score',dados,'#c0533a',null);
 }
 
 function mkMetaJacare(data,dLabels,allDays){
@@ -1356,33 +1350,18 @@ function render(){
   const ref=criados.referidos||{total:0,a:0,g:0,p:0};
   const refConv=ref.total>0?((ref.g/ref.total)*100).toFixed(1):0;
 
+  const stC=consolStatus(criados);
   const statusTable=`<div class="twrap" style="margin-bottom:16px"><table>
-    <thead><tr><th>País</th><th>Criados</th><th>Abertos</th><th>Ganhos</th><th>Perdidos</th><th>% Ganho</th><th>% Perdido</th></tr></thead>
+    <thead><tr><th></th><th>Criados</th><th>Abertos</th><th>Ganhos</th><th>Perdidos</th><th>% Ganho</th><th>% Perdido</th></tr></thead>
     <tbody>
       <tr>
-        <td><span class="pais-chip chip-chile"><span class="fi fi-cl"></span> Chile</span></td>
-        <td>${fmtN(criados.chile.total)}</td><td>${fmtN(criados.chile.status.a)}</td>
-        <td>${fmtN(criados.chile.status.g)}</td><td>${fmtN(criados.chile.status.p)}</td>
-        <td>${criados.chile.total>0?((criados.chile.status.g/criados.chile.total)*100).toFixed(1):0}%</td>
-        <td>${criados.chile.total>0?((criados.chile.status.p/criados.chile.total)*100).toFixed(1):0}%</td>
-      </tr>
-      <tr>
-        <td><span class="pais-chip chip-mexico"><span class="fi fi-mx"></span> México</span></td>
-        <td>${fmtN(criados.mexico.total)}</td><td>${fmtN(criados.mexico.status.a)}</td>
-        <td>${fmtN(criados.mexico.status.g)}</td><td>${fmtN(criados.mexico.status.p)}</td>
-        <td>${criados.mexico.total>0?((criados.mexico.status.g/criados.mexico.total)*100).toFixed(1):0}%</td>
-        <td>${criados.mexico.total>0?((criados.mexico.status.p/criados.mexico.total)*100).toFixed(1):0}%</td>
+        <td>LATAM</td>
+        <td>${fmtN(criados.total)}</td><td>${fmtN(stC.a)}</td>
+        <td>${fmtN(stC.g)}</td><td>${fmtN(stC.p)}</td>
+        <td>${criados.total>0?((stC.g/criados.total)*100).toFixed(1):0}%</td>
+        <td>${criados.total>0?((stC.p/criados.total)*100).toFixed(1):0}%</td>
       </tr>
     </tbody>
-    <tfoot><tr>
-      <td>Total</td>
-      <td>${fmtN(criados.total)}</td>
-      <td>${fmtN(criados.chile.status.a+criados.mexico.status.a)}</td>
-      <td>${fmtN(criados.chile.status.g+criados.mexico.status.g)}</td>
-      <td>${fmtN(criados.chile.status.p+criados.mexico.status.p)}</td>
-      <td>${criados.total>0?(((criados.chile.status.g+criados.mexico.status.g)/criados.total)*100).toFixed(1):0}%</td>
-      <td>${criados.total>0?(((criados.chile.status.p+criados.mexico.status.p)/criados.total)*100).toFixed(1):0}%</td>
-    </tr></tfoot>
   </table></div>`;
 
   document.getElementById('content').innerHTML=`
@@ -1390,7 +1369,7 @@ function render(){
       <div>
         <div class="ph-badge">LATAM · Inteligência Comercial</div>
         <div class="ph-ttl">LATAM · ${mes}</div>
-        <div class="ph-sub"><span class="fi fi-cl"></span> Chile + <span class="fi fi-mx"></span> México · um filtro, uma visão</div>
+        <div class="ph-sub">Visão consolidada LATAM</div>
       </div>
     </div>
 
@@ -1400,16 +1379,10 @@ function render(){
       <div class="sec-title">Leads Criados <span class="sec-date-tag tag-criado">Mês atual · ${mes}</span></div>
       <div class="sec-divider div-latam"></div>
     </div>
-    <div class="kpi-row kpi5">
+    <div class="kpi-row kpi3">
       <div class="kpi"><div class="kpi-accent" style="background:var(--latam)"></div>
         <div class="lbl">Total criado no mês</div><div class="val">${fmtN(criados.total)}</div>
         <div class="sub">${criados.mediaDia} por dia</div>${snapC?deltaHtml(criados.total,snapC.total):''}</div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
-        <div class="lbl"><span class="fi fi-cl" style="margin-right:5px;border-radius:2px"></span>Chile</div><div class="val" style="color:var(--chile)">${fmtN(criados.chile.total)}</div>
-        <div class="sub">${criados.chile.pct}% do total</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
-        <div class="lbl"><span class="fi fi-mx" style="margin-right:5px;border-radius:2px"></span>México</div><div class="val" style="color:var(--mexico)">${fmtN(criados.mexico.total)}</div>
-        <div class="sub">${criados.mexico.pct}% do total</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
         <div class="lbl">Referidos</div><div class="val" style="color:var(--gold)">${fmtN(ref.total)}</div>
         <div class="sub">${ref.a} abertos · ${ref.g} ganhos · ${ref.p} perdidos</div></div>
@@ -1419,16 +1392,15 @@ function render(){
     </div>
     ${statusTable}
     <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl">Volume dia a dia · Chile vs México</div><div class="cwrap md"><canvas id="ch-cri-dia"></canvas></div></div>
+      <div class="ccard"><div class="ccard-ttl">Volume dia a dia</div><div class="cwrap md"><canvas id="ch-cri-dia"></canvas></div></div>
       <div class="ccard"><div class="ccard-ttl">Volume por semana · últimas 8 semanas (Seg→Dom)</div><div class="cwrap md"><canvas id="ch-cri-sem"></canvas></div></div>
     </div>
     <div style="display:inline-flex;gap:3px;margin-bottom:12px;background:var(--border);border-radius:8px;padding:3px">
       <button id="score-tog-renda" onclick="setScoreView('renda')" style="background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Renda</button>
       <button id="score-tog-cargo" onclick="setScoreView('cargo')" style="background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Cargo</button>
     </div>
-    <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl" id="score-ttl-chile">Faixa de Renda · <span class="fi fi-cl"></span> Chile</div><div style="position:relative;height:220px"><canvas id="ch-score-chile"></canvas></div></div>
-      <div class="ccard"><div class="ccard-ttl" id="score-ttl-mexico">Faixa de Renda · <span class="fi fi-mx"></span> México</div><div style="position:relative;height:220px"><canvas id="ch-score-mexico"></canvas></div></div>
+    <div class="charts-1">
+      <div class="ccard"><div class="ccard-ttl" id="score-ttl">Faixa de Renda · LATAM</div><div style="position:relative;height:240px"><canvas id="ch-score"></canvas></div></div>
     </div>
 
     ${insightHtml('criados')}
@@ -1439,18 +1411,11 @@ function render(){
       <div class="sec-title">Negócios Ganhos <span class="sec-date-tag tag-ganho">Data de Ganho · ${mes}</span></div>
       <div class="sec-divider div-ganho"></div>
     </div>
-    <div class="kpi-row kpi5">
+    <div class="kpi-row kpi3">
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Total vendas</div><div class="val">${fmtN(gStats.total)}</div><div class="sub">negócios ganhos</div></div>
       <div class="kpi"><div class="kpi-accent" style="background:var(--sage)"></div>
         <div class="lbl">Receita (valor Pipe)</div><div class="val">${brlK(gStats.receita)}</div><div class="sub">${brl(gStats.receita)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
-        <div class="lbl"><span class="fi fi-cl" style="margin-right:5px;border-radius:2px"></span>Chile</div><div class="val" style="color:var(--chile)">${fmtN(gStats.chile.total)}</div>
-        <div class="sub">${brl(gStats.chile.receita)}</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
-        <div class="lbl"><span class="fi fi-mx" style="margin-right:5px;border-radius:2px"></span>México</div><div class="val" style="color:var(--mexico)">${fmtN(gStats.mexico.total)}</div>
-        <div class="sub">${brl(gStats.mexico.receita)}</div></div>
-    
       <div class="kpi"><div class="kpi-accent" style="background:var(--gold)"></div>
         <div class="lbl">Reservas</div>
         <div class="val" style="color:var(--gold)">${fmtN(gStats.porOrigem?.find(o=>o.nome==='Reserva')?.t||0)}</div>
@@ -1493,30 +1458,21 @@ function render(){
       <div class="kpi"><div class="kpi-accent" style="background:var(--rust)"></div>
         <div class="lbl">Total perdidos no mês</div><div class="val" style="color:var(--rust)">${fmtN(perdidos.total)}</div>
         <div class="sub">${perdidos.mediaDia} por dia</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--chile)"></div>
-        <div class="lbl"><span class="fi fi-cl" style="margin-right:5px;border-radius:2px"></span>Chile</div><div class="val" style="color:var(--chile)">${fmtN(perdidos.chile.total)}</div>
-        <div class="sub">${perdidos.chile.pct}% do total</div></div>
-      <div class="kpi"><div class="kpi-accent" style="background:var(--mexico)"></div>
-        <div class="lbl"><span class="fi fi-mx" style="margin-right:5px;border-radius:2px"></span>México</div><div class="val" style="color:var(--mexico)">${fmtN(perdidos.mexico.total)}</div>
-        <div class="sub">${perdidos.mexico.pct}% do total</div></div>
     </div>
     <div class="charts-2">
       <div class="ccard"><div class="ccard-ttl">Perdidos por dia · mês atual</div><div class="cwrap"><canvas id="ch-perd-dia"></canvas></div></div>
       <div class="ccard"><div class="ccard-ttl">Perdidos por semana · últimas 8 semanas (Seg→Dom)</div><div class="cwrap"><canvas id="ch-perd-sem"></canvas></div></div>
     </div>
-    <div class="side-row">
-      <div class="ccard"><div class="ccard-ttl">Top motivos · <span class="fi fi-cl"></span> Chile</div>
-        <div class="motivos" style="margin-top:4px">${motivosHtml(perdidos.chile.motivos,'var(--chile)')}</div></div>
-      <div class="ccard"><div class="ccard-ttl">Top motivos · <span class="fi fi-mx"></span> México</div>
-        <div class="motivos" style="margin-top:4px">${motivosHtml(perdidos.mexico.motivos,'var(--mexico)')}</div></div>
+    <div class="charts-1">
+      <div class="ccard"><div class="ccard-ttl">Top motivos · LATAM</div>
+        <div class="motivos" style="margin-top:4px">${motivosHtml(consolMotivos(perdidos),'var(--rust)')}</div></div>
     </div>
     <div style="display:inline-flex;gap:3px;margin-bottom:12px;background:var(--border);border-radius:8px;padding:3px">
       <button id="pscore-tog-renda" onclick="setPScoreView('renda')" style="background:var(--navy);color:#fff;border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Renda</button>
       <button id="pscore-tog-cargo" onclick="setPScoreView('cargo')" style="background:transparent;color:var(--muted);border:none;border-radius:6px;font-family:'DM Sans',sans-serif;font-size:.72rem;font-weight:700;padding:5px 14px;cursor:pointer;letter-spacing:.04em;transition:all .15s">Cargo</button>
     </div>
-    <div class="charts-2">
-      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-chile">Faixa de Renda (perdidos) · <span class="fi fi-cl"></span> Chile</div><div style="position:relative;height:220px"><canvas id="ch-perd-score-chile"></canvas></div></div>
-      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl-mexico">Faixa de Renda (perdidos) · <span class="fi fi-mx"></span> México</div><div style="position:relative;height:220px"><canvas id="ch-perd-score-mexico"></canvas></div></div>
+    <div class="charts-1">
+      <div class="ccard"><div class="ccard-ttl" id="pscore-ttl">Faixa de Renda (perdidos) · LATAM</div><div style="position:relative;height:240px"><canvas id="ch-perd-score"></canvas></div></div>
     </div>
     <div class="ot-card" style="margin-bottom:16px">
       <div class="ot-title">Quando foi criado o lead que foi perdido</div>
@@ -1529,33 +1485,21 @@ function render(){
       <span>Atualizado em ${new Date(DATA.updatedAt).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'})}</span>
     </div>`;
 
-  const snapSCh=SNAP&&SNAP.data?SNAP.data.criados?.chile?.scoreFaixas||[]:[];
-  const snapSMx=SNAP&&SNAP.data?SNAP.data.criados?.mexico?.scoreFaixas||[]:[];
-  const snapSPCh=SNAP&&SNAP.data?SNAP.data.perdidos?.chile?.scoreFaixas||[]:[];
-  const snapSPMx=SNAP&&SNAP.data?SNAP.data.perdidos?.mexico?.scoreFaixas||[]:[];
+  const snapS=SNAP&&SNAP.data?consolFaixas(SNAP.data.criados,'scoreFaixas'):[];
+  const snapSP=SNAP&&SNAP.data?consolFaixas(SNAP.data.perdidos,'scoreFaixas'):[];
 
-  mkStackedBar('ch-cri-dia',dLabels,[
-    {label:'Chile',data:criados.porDia.map(x=>x.chile),backgroundColor:'#c0392b44',borderWidth:0,borderRadius:2},
-    {label:'México',data:criados.porDia.map(x=>x.mexico),backgroundColor:'#1a6b3c44',borderWidth:0,borderRadius:2},
-  ]);
-  mkStackedBar('ch-cri-sem',wLabels,[
-    {label:'Chile',data:criados.porSemana.map(x=>x.chile),backgroundColor:'#c0392b55',borderWidth:0,borderRadius:3},
-    {label:'México',data:criados.porSemana.map(x=>x.mexico),backgroundColor:'#1a6b3c55',borderWidth:0,borderRadius:3},
-  ],{weekly:true});
-  const _chileScoreData=_scoreView==='renda'?criados.chile.scoreFaixas:criados.chile.cargoFaixas;
-  const _mexicoScoreData=_scoreView==='renda'?criados.mexico.scoreFaixas:criados.mexico.cargoFaixas;
-  mkScoreLine('ch-score-chile',_chileScoreData,'#c0392b',snapSCh.length?snapSCh:null);
-  mkScoreLine('ch-score-mexico',_mexicoScoreData,'#1a6b3c',snapSMx.length?snapSMx:null);
+  mkBar('ch-cri-dia',dLabels,criados.porDia.map(x=>x.v),'#1a6b8a',{maxTicks:20});
+  mkBar('ch-cri-sem',wLabels,criados.porSemana.map(x=>x.v),'#1a6b8a',{weekly:true});
+  if(_scoreView==='cargo')mkScoreBarH('ch-score',consolFaixas(criados,'cargoFaixas'),'#1a6b8a');
+  else mkScoreLine('ch-score',consolFaixas(criados,'scoreFaixas'),'#1a6b8a',snapS.length?snapS:null);
   mkBar('ch-gan-dia',dLabels,ganhos.porDia.map(x=>x.v),'#4a7c6a',{maxTicks:20});
   // Gráfico jacaré de meta
   setTimeout(()=>mkMetaJacare(DATA,dLabels,allDays2),0);
   // gráfico semanal de ganhos removido
   mkBar('ch-perd-dia',dLabels,perdidos.porDia.map(x=>x.v),'#c0533a',{maxTicks:20});
   mkBar('ch-perd-sem',wLabels,perdidos.porSemana.map(x=>x.v),'#c0533a',{weekly:true});
-  const _chPerdData=_pscoreView==='renda'?perdidos.chile.scoreFaixas:perdidos.chile.cargoFaixas;
-  const _mxPerdData=_pscoreView==='renda'?perdidos.mexico.scoreFaixas:perdidos.mexico.cargoFaixas;
-  mkScoreLine('ch-perd-score-chile',_chPerdData,'#c0392b',snapSPCh.length?snapSPCh:null);
-  mkScoreLine('ch-perd-score-mexico',_mxPerdData,'#1a6b3c',snapSPMx.length?snapSPMx:null);
+  if(_pscoreView==='cargo')mkScoreBarH('ch-perd-score',consolFaixas(perdidos,'cargoFaixas'),'#c0533a');
+  else mkScoreLine('ch-perd-score',consolFaixas(perdidos,'scoreFaixas'),'#c0533a',snapSP.length?snapSP:null);
   updateClassBadge();
 }
 
@@ -1776,18 +1720,16 @@ function buildPrintHtml(snap,gStats){
   const bar=(lbl,v,total,col)=>{const pct=total>0?Math.round(v/total*100):0;return`<div class="bar-row"><div class="bar-lbl">${lbl}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="bar-val">${fmtN2(v)}</div><div class="bar-pct">${pct}%</div></div>`;};
   const tbl=(hdrs,rows,foot)=>`<table><thead><tr>${hdrs.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody>${foot?`<tfoot><tr>${foot}</tr></tfoot>`:''}</table>`;
 
-  const crDiaRows=cr.porDia.filter(x=>x.v>0).map(x=>`<tr><td>${x.d.slice(8)+'/'+x.d.slice(5,7)}</td><td>${fmtN2(x.chile)}</td><td>${fmtN2(x.mexico)}</td><td><strong>${fmtN2(x.v)}</strong></td></tr>`).join('');
-  const crSemRows=cr.porSemana.filter(x=>x.v>0).map(x=>`<tr><td>${x.w.slice(8)+'/'+x.w.slice(5,7)}</td><td>${fmtN2(x.chile)}</td><td>${fmtN2(x.mexico)}</td><td><strong>${fmtN2(x.v)}</strong></td></tr>`).join('');
-  const scChRows=(cr.chile?.scoreFaixas||[]).map(f=>bar(f.label,f.v,cr.chile.total,'#c0392b')).join('');
-  const scMxRows=(cr.mexico?.scoreFaixas||[]).map(f=>bar(f.label,f.v,cr.mexico.total,'#1a6b3c')).join('');
+  const crDiaRows=cr.porDia.filter(x=>x.v>0).map(x=>`<tr><td>${x.d.slice(8)+'/'+x.d.slice(5,7)}</td><td><strong>${fmtN2(x.v)}</strong></td></tr>`).join('');
+  const crSemRows=cr.porSemana.filter(x=>x.v>0).map(x=>`<tr><td>${x.w.slice(8)+'/'+x.w.slice(5,7)}</td><td><strong>${fmtN2(x.v)}</strong></td></tr>`).join('');
+  const scRows=consolFaixas(cr,'scoreFaixas').map(f=>bar(f.label,f.v,cr.total,'#1a6b8a')).join('');
+  const stP=consolStatus(cr);
   const gaDiaRows=ga.porDia.filter(x=>x.v>0).map(x=>`<tr><td>${x.d.slice(8)+'/'+x.d.slice(5,7)}</td><td>${fmtN2(x.v)}</td><td>${brl2(x.r)}</td></tr>`).join('');
   const gOrigRows=(gStats?.porOrigem||[]).map(o=>`<tr><td>${o.nome}</td><td>${fmtN2(o.t)}</td><td>${brl2(o.rev)}</td><td>${brl2(o.ticket)}</td></tr>`).join('');
   const origTempGRows=(ga.origemTemporal||[]).map(o=>bar(o.label,o.v,gStats?.total||0,'#4a7c6a')).join('');
   const peDiaRows=pe.porDia.filter(x=>x.v>0).map(x=>`<tr><td>${x.d.slice(8)+'/'+x.d.slice(5,7)}</td><td>${fmtN2(x.v)}</td></tr>`).join('');
-  const mChRows=(pe.chile?.motivos||[]).map(m=>`<tr><td>${m.m}</td><td>${m.c}</td><td>${m.pct}%</td></tr>`).join('');
-  const mMxRows=(pe.mexico?.motivos||[]).map(m=>`<tr><td>${m.m}</td><td>${m.c}</td><td>${m.pct}%</td></tr>`).join('');
-  const scPChRows=(pe.chile?.scoreFaixas||[]).map(f=>bar(f.label,f.v,pe.chile.total,'#c0392b')).join('');
-  const scPMxRows=(pe.mexico?.scoreFaixas||[]).map(f=>bar(f.label,f.v,pe.mexico.total,'#1a6b3c')).join('');
+  const mRows=consolMotivos(pe).map(m=>`<tr><td>${m.m}</td><td>${m.c}</td><td>${m.pct}%</td></tr>`).join('');
+  const scPRows=consolFaixas(pe,'scoreFaixas').map(f=>bar(f.label,f.v,pe.total,'#c0533a')).join('');
   const origTempPRows=(pe.origemTemporal||[]).map(o=>bar(o.label,o.v,pe.total,'#c0533a')).join('');
 
   return`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>LATAM · ${nome}</title>
@@ -1839,28 +1781,22 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
   </div>
   <div class="krow">
     ${kpi('Total',fmtN2(cr.total),cr.mediaDia+' por dia')}
-    ${kpi('Chile',fmtN2(cr.chile?.total||0),cr.chile?.pct+'% do total')}
-    ${kpi('México',fmtN2(cr.mexico?.total||0),cr.mexico?.pct+'% do total')}
     ${kpi('Referidos',fmtN2(cr.referidos?.total||0),(cr.referidos?.g||0)+' ganhos')}
   </div>
-  <div class="blk-title" style="margin-top:0">Status por País</div>
-  ${tbl(['País','Criados','Abertos','Ganhos','Perdidos','% G','% P'],
-    `<tr><td>Chile</td><td>${fmtN2(cr.chile?.total||0)}</td><td>${fmtN2(cr.chile?.status?.a||0)}</td><td>${fmtN2(cr.chile?.status?.g||0)}</td><td>${fmtN2(cr.chile?.status?.p||0)}</td><td>${cr.chile?.total>0?((cr.chile.status.g/cr.chile.total)*100).toFixed(1):0}%</td><td>${cr.chile?.total>0?((cr.chile.status.p/cr.chile.total)*100).toFixed(1):0}%</td></tr>
-    <tr><td>México</td><td>${fmtN2(cr.mexico?.total||0)}</td><td>${fmtN2(cr.mexico?.status?.a||0)}</td><td>${fmtN2(cr.mexico?.status?.g||0)}</td><td>${fmtN2(cr.mexico?.status?.p||0)}</td><td>${cr.mexico?.total>0?((cr.mexico.status.g/cr.mexico.total)*100).toFixed(1):0}%</td><td>${cr.mexico?.total>0?((cr.mexico.status.p/cr.mexico.total)*100).toFixed(1):0}%</td></tr>`,null)}
+  <div class="blk-title" style="margin-top:0">Status dos criados</div>
+  ${tbl(['','Criados','Abertos','Ganhos','Perdidos','% G','% P'],
+    `<tr><td>LATAM</td><td>${fmtN2(cr.total||0)}</td><td>${fmtN2(stP.a)}</td><td>${fmtN2(stP.g)}</td><td>${fmtN2(stP.p)}</td><td>${cr.total>0?((stP.g/cr.total)*100).toFixed(1):0}%</td><td>${cr.total>0?((stP.p/cr.total)*100).toFixed(1):0}%</td></tr>`,null)}
   <div class="two-col">
     <div>
       <div class="blk-title">Volume por dia</div>
-      ${tbl(['Dia','Chile','México','Total'],crDiaRows||'<tr><td colspan="4" class="empty">Sem dados</td></tr>',null)}
+      ${tbl(['Dia','Total'],crDiaRows||'<tr><td colspan="2" class="empty">Sem dados</td></tr>',null)}
     </div>
     <div>
       <div class="blk-title">Volume por semana</div>
-      ${tbl(['Semana','Chile','México','Total'],crSemRows||'<tr><td colspan="4" class="empty">Sem dados</td></tr>',null)}
+      ${tbl(['Semana','Total'],crSemRows||'<tr><td colspan="2" class="empty">Sem dados</td></tr>',null)}
     </div>
   </div>
-  <div class="two-col">
-    <div><div class="blk-title">Score · Chile</div><div class="bars">${scChRows||'<div class="empty">Sem dados</div>'}</div></div>
-    <div><div class="blk-title">Score · México</div><div class="bars">${scMxRows||'<div class="empty">Sem dados</div>'}</div></div>
-  </div>
+  <div class="blk-title">Score · LATAM</div><div class="bars">${scRows||'<div class="empty">Sem dados</div>'}</div>
 </div>
 
 <div class="pg">
@@ -1872,8 +1808,6 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
     ${kpi('Total Vendas',fmtN2(gStats?.total||0),'negócios ganhos')}
     ${kpi('Receita Real',brl2(gStats?.receita||0),'ticket cheio aplicado')}
     ${kpi('Ticket Médio Real',gStats?.ticket>0?brl2(gStats.ticket):'—','por fechamento')}
-    ${kpi('Chile',fmtN2(gStats?.chile?.total||0),brl2(gStats?.chile?.receita||0))}
-    ${kpi('México',fmtN2(gStats?.mexico?.total||0),brl2(gStats?.mexico?.receita||0))}
   </div>
   <div class="two-col">
     <div>
@@ -1896,27 +1830,14 @@ tfoot tr{background:#f5e9d6}tfoot td{padding:6px 9px;font-weight:700;color:#1c2b
   </div>
   <div class="krow">
     ${kpi('Total Perdidos',fmtN2(pe.total),pe.mediaDia+' por dia')}
-    ${kpi('Chile',fmtN2(pe.chile?.total||0),pe.chile?.pct+'% do total')}
-    ${kpi('México',fmtN2(pe.mexico?.total||0),pe.mexico?.pct+'% do total')}
   </div>
-  <div class="two-col">
-    <div>
-      <div class="blk-title" style="margin-top:0">Motivos · Chile</div>
-      ${tbl(['Motivo','Qtd','%'],mChRows||'<tr><td colspan="3" class="empty">Sem dados</td></tr>',null)}
-    </div>
-    <div>
-      <div class="blk-title" style="margin-top:0">Motivos · México</div>
-      ${tbl(['Motivo','Qtd','%'],mMxRows||'<tr><td colspan="3" class="empty">Sem dados</td></tr>',null)}
-    </div>
-  </div>
+  <div class="blk-title" style="margin-top:0">Motivos · LATAM</div>
+  ${tbl(['Motivo','Qtd','%'],mRows||'<tr><td colspan="3" class="empty">Sem dados</td></tr>',null)}
   <div class="blk-title">Perdidos por dia</div>
   ${tbl(['Dia','Total'],peDiaRows||'<tr><td colspan="2" class="empty">Sem dados</td></tr>',null)}
   <div class="blk-title">Quando foi criado o lead que foi perdido</div>
   <div class="bars">${origTempPRows||'<div class="empty">Sem dados</div>'}</div>
-  <div class="two-col">
-    <div><div class="blk-title">Score perdidos · Chile</div><div class="bars">${scPChRows||'<div class="empty">Sem dados</div>'}</div></div>
-    <div><div class="blk-title">Score perdidos · México</div><div class="bars">${scPMxRows||'<div class="empty">Sem dados</div>'}</div></div>
-  </div>
+  <div class="blk-title">Score perdidos · LATAM</div><div class="bars">${scPRows||'<div class="empty">Sem dados</div>'}</div>
 </div>
 </body></html>`;
 }
