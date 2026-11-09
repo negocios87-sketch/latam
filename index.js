@@ -50,6 +50,13 @@ async function fetchByFilterCached(filterId,ttlMs=5*60*1000){
   return data;
 }
 
+// ── Soma de mapas (consolidação LATAM) ────────────────────────
+function somaMapas(a,b){
+  const r={...(a||{})};
+  Object.entries(b||{}).forEach(([k,v])=>{r[k]=(r[k]||0)+v;});
+  return r;
+}
+
 // ── País ──────────────────────────────────────────────────────
 function getPais(deal){
   return String(deal[PRODUCT_FIELD]||'').toLowerCase().includes('chile')?'CHILE':'MEXICO';
@@ -561,6 +568,10 @@ app.get('/api/report', async(req,res)=>{
       })(),
         chile:{total:C.chile.total,status:C.chile.st,pct:C.total>0?Math.round(C.chile.total/C.total*100):0,scoreFaixas:serFaixas(C.chile.scoreFaixas,C.chile.total),cargoFaixas:serFaixasCargo(C.chile.cargoFaixas,C.chile.total)},
         mexico:{total:C.mexico.total,status:C.mexico.st,pct:C.total>0?Math.round(C.mexico.total/C.total*100):0,scoreFaixas:serFaixas(C.mexico.scoreFaixas,C.mexico.total),cargoFaixas:serFaixasCargo(C.mexico.cargoFaixas,C.mexico.total)},
+        // Consolidado LATAM (Chile + México)
+        status:{a:C.chile.st.a+C.mexico.st.a,g:C.chile.st.g+C.mexico.st.g,p:C.chile.st.p+C.mexico.st.p},
+        scoreFaixas:serFaixas(somaMapas(C.chile.scoreFaixas,C.mexico.scoreFaixas),C.total),
+        cargoFaixas:serFaixasCargo(somaMapas(C.chile.cargoFaixas,C.mexico.cargoFaixas),C.total),
         referidos:C.referidos,
         porDia:allDays.map(d=>({d,v:C.porDia[d]||0,chile:C.chile.porDia[d]||0,mexico:C.mexico.porDia[d]||0})),
         porSemana:weeks.map(w=>({w,v:C.porSemana[w]||0,chile:C.chile.porSemana[w]||0,mexico:C.mexico.porSemana[w]||0})),
@@ -601,6 +612,10 @@ app.get('/api/report', async(req,res)=>{
         })(),
         chile:{total:P.chile.total,pct:P.total>0?Math.round(P.chile.total/P.total*100):0,motivos:Object.entries(P.chile.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.chile.total?Math.round(c/P.chile.total*100):0})),scoreFaixas:serFaixas(P.chile.scoreFaixas,P.chile.total),cargoFaixas:serFaixasCargo(P.chile.cargoFaixas,P.chile.total)},
         mexico:{total:P.mexico.total,pct:P.total>0?Math.round(P.mexico.total/P.total*100):0,motivos:Object.entries(P.mexico.motivos).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([m,c])=>({m,c,pct:P.mexico.total?Math.round(c/P.mexico.total*100):0})),scoreFaixas:serFaixas(P.mexico.scoreFaixas,P.mexico.total),cargoFaixas:serFaixasCargo(P.mexico.cargoFaixas,P.mexico.total)},
+        // Consolidado LATAM (Chile + México)
+        motivos:(()=>{const m=somaMapas(P.chile.motivos,P.mexico.motivos);return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([mo,c])=>({m:mo,c,pct:P.total?Math.round(c/P.total*100):0}));})(),
+        scoreFaixas:serFaixas(somaMapas(P.chile.scoreFaixas,P.mexico.scoreFaixas),P.total),
+        cargoFaixas:serFaixasCargo(somaMapas(P.chile.cargoFaixas,P.mexico.cargoFaixas),P.total),
         porDia:allDays.map(d=>({d,v:P.porDia[d]||0})),
         porSemana:weeks.map(w=>({w,v:P.porSemana[w]||0})),
         origemTemporal:origTemporalSer(P.origemTemporal,P.total),
@@ -664,8 +679,9 @@ app.get('/api/historico', async(req,res)=>{
         const ppKey=pais==='CHILE'?'chile':'mexico';
 
         if(lostYM){
-          if(!P_mes[lostYM])P_mes[lostYM]={total:0,chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
+          if(!P_mes[lostYM])P_mes[lostYM]={total:0,motivos:{},chile:{total:0,motivos:{}},mexico:{total:0,motivos:{}}};
           P_mes[lostYM].total++;
+          P_mes[lostYM].motivos[motivo]=(P_mes[lostYM].motivos[motivo]||0)+1;
           P_mes[lostYM][ppKey].total++;
           P_mes[lostYM][ppKey].motivos[motivo]=(P_mes[lostYM][ppKey].motivos[motivo]||0)+1;
         }
