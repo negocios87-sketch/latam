@@ -86,7 +86,7 @@ os.environ.setdefault("URL_METAS", "https://docs.google.com/spreadsheets/d/e/2PA
 os.environ.setdefault("URL_FERIADOS", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=1010928978&single=true&output=csv")
 os.environ.setdefault("TURMAS_URL", "https://docs.google.com/spreadsheets/d/e/2PACX-1vSvwO3Ag2f2cbkVgR1pJZp6fANQcbualGKlAG50fmOljuEGKZ1gJBbSAjRdO3SomXUEVQOWnTvlfHRd/pub?gid=715115296&single=true&output=csv")
 
-RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RAIZ = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__, static_folder=None)
 
 FUNIL_LATAM = config()["funis"]["latam"][0]
